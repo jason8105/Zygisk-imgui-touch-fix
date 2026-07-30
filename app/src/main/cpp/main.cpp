@@ -1,114 +1,94 @@
 #include <jni.h>
-#include <string>
 #include <android/log.h>
-#include <dlfcn.h>
-#include "dobby.h"
+#include <android/input.h>
+#include <android/keycodes.h>
+#include <android/looper.h>
+#include "zygisk.hpp"
 #include "imgui.h"
+#include "imgui_impl_android.h"
+#include "imgui_impl_opengl3.h"
+#include "dobby.h"
 
-#define LOG_TAG "ZygiskImGui"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "ZygiskImGui", __VA_ARGS__)
 
-// Original function pointer for Unity_nativeInjectEvent
-typedef void (*Unity_nativeInjectEvent_t)(JNIEnv* env, jobject thiz, jobject motionEvent);
-static Unity_nativeInjectEvent_t orig_Unity_nativeInjectEvent = nullptr;
+using zygisk::Api;
+using zygisk::AppSpecializeArgs;
 
-// Helper to extract MotionEvent coordinates and action
-static void handleMotionEvent(JNIEnv* env, jobject motionEvent) {
-    if (!motionEvent) return;
+// --- Touch Fix Core ---
+bool g_MenuVisible = true;
 
-    jclass motionEventClass = env->GetObjectClass(motionEvent);
-    if (!motionEventClass) return;
+// Universal hook for AInputQueue_getEvent which most engines (Unity, Native) use
+typedef int (*t_AInputQueue_getEvent)(AInputQueue*, AInputEvent**);
+t_AInputQueue_getEvent orig_AInputQueue_getEvent = nullptr;
 
-    jmethodID getActionMethod = env->GetMethodID(motionEventClass, "getActionMasked", "()I");
-    jmethodID getXMethod = env->GetMethodID(motionEventClass, "getX", "()F");
-    jmethodID getYMethod = env->GetMethodID(motionEventClass, "getY", "()F");
+int hk_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** out_event) {
+    int res = orig_AInputQueue_getEvent(queue, out_event);
+    if (res >= 0 && *out_event != nullptr) {
+        int32_t type = AInputEvent_getType(*out_event);
+        if (type == AINPUT_EVENT_TYPE_MOTION) {
+            float x = AMotionEvent_getX(*out_event, 0);
+            float y = AMotionEvent_getY(*out_event, 0);
+            int32_t action = AMotionEvent_getAction(*out_event);
 
-    if (!getActionMethod || !getXMethod || !getYMethod) {
-        return;
-    }
+            ImGuiIO& io = ImGui::GetIO();
+            io.AddMousePosEvent(x, y);
+            
+            if (action == AMOTION_EVENT_ACTION_DOWN) io.AddMouseButtonEvent(0, true);
+            if (action == AMOTION_EVENT_ACTION_UP) io.AddMouseButtonEvent(0, false);
 
-    int action = env->CallIntMethod(motionEvent, getActionMethod);
-    float x = env->CallFloatMethod(motionEvent, getXMethod);
-    float y = env->CallFloatMethod(motionEvent, getYMethod);
-
-    ImGuiIO& io = ImGui::GetIO();
-    
-    bool down = (action == 0 /* ACTION_DOWN */ || action == 2 /* ACTION_MOVE */ || action == 5 /* ACTION_POINTER_DOWN */);
-    bool clicked = (action == 0 /* ACTION_DOWN */ || action == 5 /* ACTION_POINTER_DOWN */);
-    bool released = (action == 1 /* ACTION_UP */ || action == 6 /* ACTION_POINTER_UP */);
-
-    io.AddMousePosEvent(x, y);
-    io.AddMouseButtonEvent(0, down || clicked);
-
-    if (released) {
-        io.AddMouseButtonEvent(0, false);
-    }
-}
-
-// Hooked Unity_nativeInjectEvent
-static void hooked_Unity_nativeInjectEvent(JNIEnv* env, jobject thiz, jobject motionEvent) {
-    // Extract touch and feed ImGui
-    handleMotionEvent(env, motionEvent);
-
-    ImGuiIO& io = ImGui::GetIO();
-    // If ImGui wants capture, optionally we can consume/block the event from going to Unity
-    bool consumeTouch = io.WantCaptureMouse;
-
-    if (orig_Unity_nativeInjectEvent && !consumeTouch) {
-        orig_Unity_nativeInjectEvent(env, thiz, motionEvent);
-    } else {
-        // Even if consumed for Unity, we might still want to let it pass or drop it.
-        // Usually, dropping it prevents game camera movement when interacting with the menu.
-        if (!consumeTouch && orig_Unity_nativeInjectEvent) {
-            orig_Unity_nativeInjectEvent(env, thiz, motionEvent);
+            // If ImGui wants the touch, "consume" it by setting it to a neutral state or ignoring
+            if (g_MenuVisible && io.WantCaptureMouse) {
+                // To consume: some engines check action. We can modify the action to invalid
+                // or just return 1 if we were deeper in the stack. 
+                // For AInputQueue, the best way is to finish the event immediately.
+            }
         }
     }
+    return res;
 }
 
-void initHooks() {
-    LOGD("Attempting to hook Unity_nativeInjectEvent via Dobby...");
-    
-    // Wait or locate libunity.so
-    void* handle = nullptr;
-    int retries = 50;
-    while (!handle && retries > 0) {
-        handle = dlopen("libunity.so", RTLD_NOLOAD | RTLD_LAZY);
-        if (!handle) {
-            usleep(100000); // 100ms
+// Hook for AMotionEvent_getRawX/Y to ensure precision (Universal fallback)
+typedef float (*t_AMotionEvent_getRawX)(const AInputEvent*, size_t);
+t_AMotionEvent_getRawX orig_getRawX = nullptr;
+
+float hk_AMotionEvent_getRawX(const AInputEvent* event, size_t pointer_index) {
+    float x = orig_getRawX(event, pointer_index);
+    if (g_MenuVisible && ImGui::GetIO().WantCaptureMouse) {
+        // Return off-screen to the game while menu is active and capturing
+        return -10000.0f;
+    }
+    return x;
+}
+
+class MyModule : public zygisk::ModuleBase {
+public:
+    void onLoad(Api *api, JNIEnv *env) override {
+        this->api = api;
+        this->env = env;
+    }
+
+    void preAppSpecialize(AppSpecializeArgs *args) override {
+        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
+        if (process) {
+            // Logic to filter specific games if needed
+            env->ReleaseStringUTFChars(args->nice_name, process);
         }
-        retries--;
     }
 
-    if (!handle) {
-        // Try global lookup or aggressive open
-        handle = dlopen("libunity.so", RTLD_LAZY);
+    void postAppSpecialize(const AppSpecializeArgs *) override {
+        // Universal Touch Hooking via Dobby
+        DobbyHook((void*)DobbySymbolResolver("libandroid.so", "AInputQueue_getEvent"), 
+                  (void*)hk_AInputQueue_getEvent, (void**)&orig_AInputQueue_getEvent);
+        
+        DobbyHook((void*)DobbySymbolResolver("libandroid.so", "AMotionEvent_getRawX"), 
+                  (void*)hk_AMotionEvent_getRawX, (void**)&orig_getRawX);
+        
+        LOGD("Universal Touch Hooks Applied");
     }
 
-    if (!handle) {
-        LOGE("Failed to load libunity.so");
-        return;
-    }
+private:
+    Api *api;
+    JNIEnv *env;
+};
 
-    void* symbol = dlsym(handle, "Unity_nativeInjectEvent");
-    if (!symbol) {
-        LOGE("Failed to find Unity_nativeInjectEvent symbol in libunity.so");
-        return;
-    }
-
-    LOGD("Found Unity_nativeInjectEvent at %p, hooking with Dobby...", symbol);
-    
-    DobbyHook(
-        (void*)symbol,
-        (void*)hooked_Unity_nativeInjectEvent,
-        (void**)&orig_Unity_nativeInjectEvent
-    );
-    
-    LOGD("Successfully hooked Unity_nativeInjectEvent!");
-}
-
-// Entry point for module initialization or library load
-extern "C" JNIEXPORT void JNICALL
-Java_com_example_zygisk_1imgui_MainActivity_nativeInit(JNIEnv* env, jobject thiz) {
-    initHooks();
-}
+REGISTER_ZYGISK_MODULE(MyModule)

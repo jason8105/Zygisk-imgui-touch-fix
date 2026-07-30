@@ -1,16 +1,53 @@
+plugins {
+    id 'com.android.library'
+}
+
 android {
-    // ... existing config
-    sourceSets {
-        main {
-            jniLibs.srcDirs = ['libs']
+    namespace "com.example.zygisk_imgui"
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
+                arguments "-DANDROID_STL=c++_static"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
 
-task copyZygiskLib(type: Copy) {
-    from("$buildDir/intermediates/cmake/release/obj")
-    into("$rootDir/module/zygisk")
-    include("**/libzygisk.so")
+task packageMagisk(type: Zip) {
+    archiveFileName = "Zygisk-ImGui-Universal.zip"
+    destinationDirectory = file("$buildDir/outputs/magisk")
+
+    from("../module.prop")
+    
+    // Logic to grab compiled libs and put them in zygisk/<abi>/libzygisk.so
+    def abiList = ['arm64-v8a', 'armeabi-v7a']
+    abiList.each { abi ->
+        from("$buildDir/intermediates/cmake/release/obj/${abi}/libzygisk.so") {
+            into "zygisk/${abi}"
+        }
+    }
 }
 
-assembleRelease.finalizedBy(copyZygiskLib)
+afterEvaluate {
+    packageMagisk.dependsOn externalNativeBuildRelease
+}
