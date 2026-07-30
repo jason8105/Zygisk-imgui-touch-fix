@@ -1,0 +1,7 @@
+id=zygisk_imgui_touch_fix
+name=Zygisk Universal ImGui Touch-Fixed Menu
+version=v1.0
+versionCode=1
+author=Elite Engineer
+description=Universal Zygisk module featuring robust touch input correction for ImGui across all game engines.
+minMagisk=24000

@@ -1,13 +1,13 @@
 #include <jni.h>
-#include <unistd.h>
 #include <android/log.h>
+#include <unistd.h>
 #include "zygisk.hpp"
 #include "imgui.h"
 
-#define LOG_TAG "ZygiskImgui"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOG_TAG "ZygiskModule"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-void InitInputHooks();
+void init_input_hooks();
 
 class ImGuiZygiskModule : public zygisk::ModuleBase {
 public:
@@ -17,20 +17,17 @@ public:
     }
 
     void preAppSpecialize(zygisk::AppSpecializeArgs* args) override {
-        // Executed before app specialization
+        // Prepare environment prior to app specialization
     }
 
-    void postAppSpecialize(zygisk::AppSpecializeArgs* args) override {
-        LOGI("ImGui Zygisk Module loaded into target process.");
-        
-        // Initialize ImGui context
+    void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
+        LOGD("Zygisk module loaded into target application process.");
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         ImGui::StyleColorsDark();
 
-        // Initialize universal touch hook
-        InitInputHooks();
+        init_input_hooks();
     }
 
 private:
@@ -38,5 +35,4 @@ private:
     JNIEnv* env = nullptr;
 };
 
-// Register module for Magisk v24-26 Zygisk API
 REGISTER_ZYGISK_MODULE(ImGuiZygiskModule)
