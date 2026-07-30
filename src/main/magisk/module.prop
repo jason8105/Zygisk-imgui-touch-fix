@@ -1,0 +1,6 @@
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Touch Fix (Unity JNI Hook)
+version=v1.0
+versionCode=1
+author=Elite Engineer
+description=Zygisk module featuring Unity JNI touch injection hook and ImGui overlay.
