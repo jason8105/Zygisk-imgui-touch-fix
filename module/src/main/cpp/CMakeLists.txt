@@ -1,25 +1,28 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(zygisk_touch_fix LANGUAGES C CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-
-# Add Dobby if available or mock/include headers if bundled
-# Assuming Dobby headers and static/shared libs are placed under third_party/dobby or similar,
-# or we define standard include paths. Let's make sure dobby.h is accessible.
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+project("zygisk_touch_fix")
 
 add_library(zygisk_touch_fix SHARED
-    main.cpp
+    native_lib.cpp
+    # ImGui sources if included directly, or link prebuilt/submodule
+    ../../../../../imgui/imgui.cpp
+    ../../../../../imgui/imgui_demo.cpp
+    ../../../../../imgui/imgui_draw.cpp
+    ../../../../../imgui/imgui_tables.cpp
+    ../../../../../imgui/imgui_widgets.cpp
+    ../../../../../imgui/backends/imgui_impl_opengl3.cpp
+)
+
+target_include_directories(zygisk_touch_fix PRIVATE
+    ../../../../../imgui
+    ../../../../../imgui/backends
+    include
 )
 
 find_library(log-lib log)
-find_library(android-lib android)
+find_library(gles-lib GLESv2)
 
 target_link_libraries(zygisk_touch_fix
     ${log-lib}
-    ${android-lib}
+    ${gles-lib}
+    android
 )
