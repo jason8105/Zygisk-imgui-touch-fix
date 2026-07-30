@@ -1,9 +1,7 @@
-```
-id=universal-imgui-hook
-name=Universal ImGui Overlay
-version=1.0
+id=imgui_universal_touch
+name=Universal ImGui Zygisk
+version=v1.0
 versionCode=1
-author=Developer
-description=Universal touch-blocking ImGui hook for Zygisk.
+author=EliteEngineer
+description=Universal ImGui menu with robust AInputQueue touch fix for Magisk 24-26.
 minMagisk=24000
-```
