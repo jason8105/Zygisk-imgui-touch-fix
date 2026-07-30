@@ -1,63 +1,77 @@
 plugins {
-    id 'com.android.library'
+    id 'com.android.application'
 }
 
 android {
-    namespace 'com.example.zygisk_imgui'
-    compileSdk 33
+    namespace 'com.zygisktouch.mod'
+    compileSdk 34
 
     defaultConfig {
+        applicationId "com.zygisktouch.mod"
         minSdk 24
-        targetSdk 33
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
-                arguments "-DANDROID_STL=c++_static"
-                abiFilters 'arm64-v8a', 'armeabi-v7a'
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_shared"
             }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
     externalNativeBuild {
         cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
         }
     }
-    
-    packagingOptions {
-        doNotStrip "**/libzygisk.so"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
-android.libraryVariants.all { variant ->
-    def variantName = variant.name.capitalize()
-    def zipTask = tasks.register("zip${variantName}", Zip) {
-        archiveFileName = "Zygisk-ImGui-${variant.name}.zip"
-        destinationDirectory = file("$buildDir/outputs/module")
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+}
 
-        // 1. Include module.prop
-        from("${projectDir}/../module.prop")
+import org.apache.tools.zip.ZipEntry
+import org.apache.tools.zip.ZipOutputStream
 
-        // 2. Include the compiled binaries in Zygisk structure
-        // This fixes the "input_file_does_not_exist" by pointing exactly where CMake outputs
-        variant.externalNativeBuildProviders.each { provider ->
-            def cmakeTask = provider.get()
-            dependsOn cmakeTask
-            
-            def objPath = cmakeTask.objFolder
-            from(objPath) {
-                into "zygisk"
-                include "**/libzygisk.so"
-            }
+task buildMagiskModule(type: Zip) {
+    dependsOn 'assembleRelease'
+    archiveFileName = "Zygisk-ImGui-TouchFix-Module.zip"
+    destinationDirectory = file("$buildDir/outputs/magisk")
+
+    from("$projectDir/src/main/magisk") {
+        include "module.prop"
+        include "customize.sh"
+        include "post-fs-data.sh"
+        include "service.sh"
+    }
+
+    into("zygisk") {
+        from("$buildDir/intermediates/cmake/release/obj") {
+            include "armeabi-v7a/libzygisk.so"
+            include "arm64-v8a/libzygisk.so"
+            include "x86/libzygisk.so"
+            include "x86_64/libzygisk.so"
         }
-        
-        // Ensure folder structure is zygisk/<abi>/libzygisk.so
-        rename { String fileName ->
-            if (fileName.contains("libzygisk.so")) {
-                return fileName.replace("libzygisk.so", "libzygisk.so")
-            }
-            return fileName
-        }
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name == 'bundleRelease' || task.name == 'assembleRelease') {
+        task.finalizedBy('buildMagiskModule')
     }
 }

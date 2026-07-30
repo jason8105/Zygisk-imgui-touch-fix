@@ -1,39 +1,15 @@
 #include "imgui.h"
-#include <stdio.h>
-#include <stdlib.h>
-
-static ImIO g_IO;
-static bool g_Initialized = false;
-
-ImIO& ImGui::GetIO() {
-    return g_IO;
+namespace ImGui {
+    static IO g_IO;
+    void CreateContext() {}
+    void DestroyContext() {}
+    IO& GetIO() { return g_IO; }
+    void NewFrame() {}
+    void Render() {}
+    void Begin(const char*, bool*, int) {}
+    void End() {}
+    bool Button(const char*, const ImVec2&) { return false; }
+    void Text(const char*, ...) {}
 }
-
-void ImGui::CreateContext() {
-    memset(&g_IO, 0, sizeof(g_IO));
-    g_Initialized = true;
-}
-
-void ImGui::DestroyContext() {
-    g_Initialized = false;
-}
-
-void ImGui::NewFrame() {
-}
-
-void ImGui::Render() {
-}
-
-bool ImGui::Begin(const char* name, bool* p_open, int flags) {
-    return true;
-}
-
-void ImGui::End() {
-}
-
-void ImGui::Text(const char* fmt, ...) {
-}
-
-bool ImGui::Button(const char* label, const ImVec2& size) {
-    return false;
-}
+void IO::AddMousePosEvent(float, float) {}
+void IO::AddMouseButtonEvent(int, bool) {}

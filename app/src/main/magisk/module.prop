@@ -1,8 +1,7 @@
-id=zygisk_imgui_universal
-name=Zygisk ImGui Universal Menu
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Universal Touch Fix
 version=v1.0
 versionCode=1
-author=Developer
-description=Universal Zygisk ImGui menu with robust touch fix supporting Unity, Unreal, and native C++ games.
+author=EliteEngineer
+description=Universal Zygisk ImGui menu and touch interception module supporting Unity, Unreal, and native engines (Magisk 24-26).
 minMagisk=24000
-=== END FILE: app/src/main/magisk/module.prop ===

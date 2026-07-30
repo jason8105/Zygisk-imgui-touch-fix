@@ -1,34 +1,23 @@
 cmake_minimum_required(VERSION 3.22.1)
-project("zygisk_imgui")
+project(zygisk_mod CXX)
 
-# Dobby for hooking
-add_subdirectory(dobby)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ImGui files (assumed to be in imgui/ folder)
-set(IMGUI_DIR imgui)
-file(GLOB IMGUI_SOURCES 
-    "${IMGUI_DIR}/*.cpp"
-    "${IMGUI_DIR}/backends/imgui_impl_android.cpp"
-    "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
-)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(zygisk SHARED 
+add_library(zygisk SHARED
     main.cpp
-    hooks.cpp
-    renderer.cpp
-    ${IMGUI_SOURCES}
+    imgui/imgui.cpp
+    imgui/imgui_draw.cpp
+    imgui/imgui_tables.cpp
+    imgui/imgui_widgets.cpp
 )
 
-target_include_directories(zygisk PRIVATE 
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-    dobby/include
-)
+find_library(log-lib log)
+find_library(android-lib android)
 
-target_link_libraries(zygisk 
-    dobby 
-    GLESv3 
-    EGL 
-    android 
-    log
+target_link_libraries(zygisk
+    ${log-lib}
+    ${android-lib}
 )
