@@ -1,0 +1,7 @@
+// Append this to your app/build.gradle
+task prepareMagiskModule(type: Copy) {
+    from("$buildDir/intermediates/cmake/release/obj")
+    into("$buildDir/magisk_module/zygisk")
+    include("**/libzygisk.so")
+    eachFile { f -> f.path = f.path.replaceAll(".*/libzygisk.so", "libzygisk.so") }
+}
