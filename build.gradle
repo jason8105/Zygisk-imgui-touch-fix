@@ -1,24 +1,20 @@
-// Removed deprecated org.apache.tools.cmake.util.FileUtils
-// Corrected native library output packaging for Magisk compatibility
-android {
-    defaultConfig {
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -fexceptions"
-            }
-        }
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
     }
-    sourceSets {
-        main {
-            jniLibs.srcDirs = ['src/main/jniLibs']
-        }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.0'
     }
 }
 
-task copyNativeLibs(type: Copy) {
-    from fileTree(dir: 'build/intermediates/cmake/release/obj')
-    into 'module/zygisk'
-    include '**/*.so'
-    eachFile { f -> f.path = f.path.replaceAll('obj/', '') }
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
-build.dependsOn copyNativeLibs
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
