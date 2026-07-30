@@ -1,42 +1,34 @@
-#include "zygisk.hpp"
 #include <jni.h>
 #include <android/log.h>
+#include <unistd.h>
+#include "zygisk.hpp"
+#include "input_hook.h"
+#include "imgui_impl.h"
 
-#define LOG_TAG "ZygiskImGui"
+#define LOG_TAG "ZygiskMain"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-void initializeImGuiHooks();
-
-class ImGuiZygiskModule : public zygisk::ZygiskModule {
+class ZygiskModule : public zygisk::ModuleBase {
 public:
-    void onPreSpecialize(zygisk::AppSpecializeArgs *args) override {
-        LOGI("onPreSpecialize invoked for package: %s", args->nice_name ? args->nice_name : "unknown");
+    void onLoad(zygisk::Api *api, JNIEnv *env) override {
+        this->api = api;
+        this->env = env;
+        LOGI("ZygiskModule onLoad loaded successfully!");
     }
 
-    void onPostSpecialize(zygisk::AppSpecializeArgs *args) override {
-        LOGI("onPostSpecialize invoked, initializing ImGui hooks");
-        initializeImGuiHooks();
+    void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+        // Intercept app specialization for Magisk v24-26 compatibility
+        InputHook::initHooks();
     }
+
+    void postAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+        LOGI("ZygiskModule postAppSpecialize executed.");
+    }
+
+private:
+    zygisk::Api *api = nullptr;
+    JNIEnv *env = nullptr;
 };
 
-static zygisk::LoaderAPI *g_api = nullptr;
-
-extern "C" {
-
-void zygisk_module_entry(zygisk::LoaderAPI *api, JNIEnv *env) {
-    g_api = api;
-    LOGI("zygisk_module_entry loaded successfully for Magisk v24-26 compatible environment.");
-}
-
-bool register_zygisk_module(zygisk::LoaderAPI *api) {
-    auto module = new ImGuiZygiskModule();
-    return api->registerModule(api, module);
-}
-
-} // extern "C"
-
-// Magisk Zygisk entry point macro mapping
-__attribute__((constructor)) static void init() {
-    // Constructor registration for Zygisk v24-26
-    LOGI("Zygisk ImGui native library loaded into zygote.");
-}
+static LibraryLoader g_loader;
+REGISTER_ZYGISK_MODULE(ZygiskModule)
