@@ -3,5 +3,5 @@ name=Zygisk ImGui Universal Touch Fix
 version=v1.0.0
 versionCode=100
 author=Elite Engineer
-description=Universal Zygisk ImGui Menu with robust multi-engine touch fix for Magisk 24-26.
+description=Universal Zygisk ImGui menu with robust touch fix for Magisk 24-26 supporting Unity, Unreal, and native C++ engines.
 minMagisk=24000

@@ -4,70 +4,65 @@ plugins {
 
 android {
     namespace = "com.zygisk.imguitouchfix"
-    compileSdk = 33
+    compileSdk = 34
 
     defaultConfig {
-        minSdk = 26
-        targetSdk = 33
+        minSdk = 24
+        targetSdk = 34
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles("consumer-rules.pro")
-        
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17", "-frtti", "-fexceptions")
-                arguments("-DANDROID_STL=c++_shared")
+                cppFlags += "-std=c++17"
+                arguments += "-DANDROID_STL=c++_shared"
             }
         }
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
-    
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
     }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
     
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
-dependencies {
-    implementation("androidx.appcompat:appcompat:1.6.1")
-}
-
-// Task to assemble final flashable Magisk module zip containing compiled Zygisk binaries
-tasks.register("buildMagiskModuleZip", Zip::class) {
+val prepareMagiskFiles by tasks.registering(Copy::class) {
     dependsOn("assembleRelease")
-    archiveFileName.set("zygisk-imgui-touch-fix-release.zip")
-    destinationDirectory.set(file("$buildDir/outputs/magisk"))
+    
+    val abiList = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+    for (abi in abiList) {
+        from(layout.buildDirectory.dir("intermediates/cmake/release/obj/$abi/libzygisk.so"))
+        into(layout.buildDirectory.dir("magisk_module/zygisk/$abi"))
+    }
+    
+    doFirst {
+        layout.buildDirectory.dir("magisk_module/zygisk").get().asFile.mkdirs()
+    }
+}
 
-    from("$rootDir/module.prop")
-    from("$rootDir/customize.sh")
+tasks.register<Zip>("buildMagiskZip") {
+    dependsOn(prepareMagiskFiles)
+    
+    // Explicitly declare inputs safely or avoid strict validation failures
+    val outputDir = layout.buildDirectory.dir("magisk_module")
+    inputs.dir(outputDir)
 
-    // Map compiled shared libraries into the standard Zygisk module directory layout
-    into("zygisk/arm64-v8a") {
-        from("$buildDir/intermediates/cmake/release/obj/arm64-v8a/libzygisk.so")
+    from(outputDir)
+    from("src/main/magisk") {
+        include("module.prop", "post-fs-data.sh", "service.sh", "action.sh")
     }
-    into("zygisk/armeabi-v7a") {
-        from("$buildDir/intermediates/cmake/release/obj/armeabi-v7a/libzygisk.so")
-    }
-    into("zygisk/x86") {
-        from("$buildDir/intermediates/cmake/release/obj/x86/libzygisk.so")
-    }
-    into("zygisk/x86_64") {
-        from("$buildDir/intermediates/cmake/release/obj/x86_64/libzygisk.so")
-    }
+    
+    archiveFileName.set("Zygisk-ImGui-Touch-Fix.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("outputs/magisk"))
 }
