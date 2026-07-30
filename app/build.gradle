@@ -1,25 +1,24 @@
 plugins {
-    id 'com.android.library'
+    id 'com.android.application'
 }
 
 android {
-    namespace 'com.zygisk.imgui.touchfix'
-    compileSdk 34
+    namespace 'com.zygisk.imgui'
+    compileSdk 33
 
     defaultConfig {
-        minSdk 24
-        targetSdk 34
-        versionCode 100
-        versionName "1.0.0"
+        applicationId "com.zygisk.imgui"
+        minSdk 26
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -frtti -fexceptions"
+                cppFlags "-std=c++17"
                 arguments "-DANDROID_STL=c++_shared"
             }
         }
-
-        ndkVersion "25.2.9519653"
     }
 
     buildTypes {
@@ -36,36 +35,38 @@ android {
         }
     }
 
-    packagingOptions {
-        jniLibs {
-            useLegacyPackaging = true
-        }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 }
 
-// Custom task to package the compiled .so files and module assets into a flashable Magisk module zip
-task buildMagiskModule(type: Zip, dependsOn: 'bundleReleaseAar') {
-    archiveFileName = 'zygisk_imgui_touch_fix_magisk.zip'
+import org.apache.tools.ant.filters.FixCrLfFilter
+
+task buildMagiskModule(type: Zip) {
+    dependsOn 'assembleRelease'
+    archiveFileName = 'zygisk-imgui-touch-fix-magisk.zip'
     destinationDirectory = file("$buildDir/outputs/magisk")
 
-    from("${rootDir}/../module.prop")
-    from("${rootDir}/../customize.sh")
-    
-    // Include compiled native libraries from external native build outputs
-    into("system/lib64") {
-        from("${buildDir}/intermediates/cmake/release/obj/arm64-v8a")
-        include("libzygisk_imgui.so")
+    from("$projectDir/src/main/magisk") {
+        include 'module.prop'
+        include 'customize.sh'
+        include 'post-fs-data.sh'
     }
-    into("system/lib") {
-        from("${buildDir}/intermediates/cmake/release/obj/armeabi-v7a")
-        include("libzygisk_imgui.so")
+
+    into("zygisk") {
+        from("$buildDir/intermediates/cmake/release/obj") {
+            include "**/libzygisk.so"
+        }
     }
 }
 
-tasks.named('assembleRelease').configure {
-    finalizedBy('buildMagiskModule')
+tasks.whenTaskAdded { task ->
+    if (task.name == 'assembleRelease') {
+        task.finalizedBy('buildMagiskModule')
+    }
 }

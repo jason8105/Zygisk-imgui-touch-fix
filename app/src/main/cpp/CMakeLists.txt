@@ -1,23 +1,24 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(zygisk_imgui)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-
-# Include Zygisk headers (assumed or stubbed in repo or included via path)
-# If zygisk.hpp is in the same directory, it will be found.
-
-add_library(zygisk_imgui SHARED
-    zygisk_module.cpp
-    universal_touch.cpp
+add_library(zygisk SHARED
+    zygisk_main.cpp
+    imgui/imgui.cpp
+    imgui/imgui_draw.cpp
+    imgui/imgui_tables.cpp
+    imgui/imgui_widgets.cpp
+    imgui/imgui_impl_opengl3.cpp
+    imgui/imgui_impl_android.cpp
 )
 
-find_library(log-lib log)
-find_library(android-lib android)
+target_include_directories(zygisk PRIVATE
+    imgui
+    include
+)
 
-target_link_libraries(zygisk_imgui
-    ${log-lib}
-    ${android-lib}
+target_link_libraries(zygisk
+    android
+    EGL
+    GLESv3
+    log
 )
