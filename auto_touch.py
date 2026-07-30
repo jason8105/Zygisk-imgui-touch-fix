@@ -51,11 +51,31 @@ sys.stderr = sys.stdout
 
 print(f"[*] Logging initialized. Saving session history to: {LOG_FILE}")
 
-# API Keys pool
-API_KEYS_POOL = {
-    1: os.environ.get("GEMINI_KEY_1", ""),
-    2: os.environ.get("GEMINI_KEY_2", "")
-}
+# ==========================================
+# COMMAND-LINE API KEY CONFIGURATION
+# ==========================================
+env_key_1 = os.environ.get("GEMINI_KEY_1", "")
+env_key_2 = os.environ.get("GEMINI_KEY_2", "")
+
+chosen_arg = sys.argv[1].lower() if len(sys.argv) > 1 else ""
+
+API_KEYS_POOL = {}
+if chosen_arg == "key_2":
+    print("[*] CLI Argument Detected: Prioritizing GEMINI_KEY_2 as Primary")
+    API_KEYS_POOL[1] = env_key_2
+    API_KEYS_POOL[2] = env_key_1
+elif chosen_arg == "key_1":
+    print("[*] CLI Argument Detected: Prioritizing GEMINI_KEY_1 as Primary")
+    API_KEYS_POOL[1] = env_key_1
+    API_KEYS_POOL[2] = env_key_2
+elif len(chosen_arg) > 10:  # Direct raw API key string passed from terminal
+    print("[*] CLI Argument Detected: Using custom raw API key as Primary")
+    API_KEYS_POOL[1] = chosen_arg
+    API_KEYS_POOL[2] = env_key_1 if env_key_1 != chosen_arg else env_key_2
+else:
+    # Default fallback order: Key 1 first, Key 2 second
+    API_KEYS_POOL[1] = env_key_1
+    API_KEYS_POOL[2] = env_key_2
 
 def load_highest_token_models():
     """Automatically reads allmodelai.json and picks ALL text models sorted by highest inputTokenLimit"""
@@ -233,7 +253,7 @@ ERROR LOGS / STATUS CONTEXT:
         if not active_key:
             continue
             
-        print(f"\n[*] Switching to API Key ID: {key_id}")
+        print(f"\n[*] Trying API Key ID: {key_id}")
         
         for model_name in MODELS_POOL:
             url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={active_key}"
@@ -263,10 +283,13 @@ def apply_ai_patches(ai_response):
             with open("ai_fix_suggestion.txt", "r", encoding="utf-8") as f:
                 ai_response = f.read()
 
+    # Clean potential markdown code wrapper syntax around the response
+    ai_response = re.sub(r"^```[a-zA-Z]*\n", "", ai_response, flags=re.MULTILINE)
+
     commit_match = re.search(r"=== COMMIT:\s*([^\n]+)\s*===", ai_response)
     commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve packaging path and ensure compiled binaries are included in zip"
 
-    # Bulletproof regex: file path cannot contain newlines ([^\n]+)
+    # Enhanced Regex to gracefully capture file paths and contents even if formatting varies
     pattern_file = r"=== FILE:\s*([^\n]+)===\s*\n(.*?)(?==== FILE:|=== DELETE:|\Z)"
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
     
@@ -276,13 +299,24 @@ def apply_ai_patches(ai_response):
         matches_file = matches_explicit
 
     for file_path, content in matches_file:
-        file_path = file_path.strip().replace("\r", "")
+        file_path = file_path.strip().replace("\r", "").strip("`").strip()
         content = content.strip().replace("=== END FILE ===", "").strip()
+        
+        # Remove inner markdown block wrappers if model enclosed file content in ```
+        if content.startswith("```"):
+            content = re.sub(r"^```[a-zA-Z]*\n", "", content)
+        if content.endswith("```"):
+            content = re.sub(r"\n```\s*$", "", content)
+            
+        content = content.strip()
+
         if not file_path or len(file_path) > 200:
             continue
+            
         dir_name = os.path.dirname(file_path)
         if dir_name and not os.path.exists(dir_name):
             os.makedirs(dir_name, exist_ok=True)
+            
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content + "\n")
         changes_made.append(f"Updated/Created: {file_path}")
@@ -290,12 +324,13 @@ def apply_ai_patches(ai_response):
     pattern_del = r"=== DELETE:\s*([^\n]+)===\s*(?:=== END DELETE ===)?"
     matches_del = re.findall(pattern_del, ai_response, re.DOTALL)
     for file_path in matches_del:
-        file_path = file_path.strip().replace("\r", "")
+        file_path = file_path.strip().replace("\r", "").strip("`").strip()
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
             changes_made.append(f"Deleted: {file_path}")
 
     if not changes_made:
+        print("[!] Warning: Response received from model but could not parse patch blocks. Saving to ai_fix_suggestion.txt")
         with open("ai_fix_suggestion.txt", "w", encoding="utf-8") as f:
             f.write(ai_response)
         return [], commit_message

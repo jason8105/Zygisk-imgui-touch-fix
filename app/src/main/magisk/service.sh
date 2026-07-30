@@ -1,3 +1,3 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
-# background service script
+# Background service tasks if needed
