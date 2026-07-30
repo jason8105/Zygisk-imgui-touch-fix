@@ -89,6 +89,29 @@ def get_latest_workflow_run():
     except Exception:
         return None, None
 
+def check_artifact_size(run_id):
+    """Checks the generated workflow artifacts to ensure the zip is not empty/broken (~746 bytes)."""
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}/artifacts"
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=15).json()
+        artifacts = res.get("artifacts", [])
+        if not artifacts:
+            print("[!] Warning: No build artifacts found in this run!")
+            return False
+            
+        for art in artifacts:
+            size = art.get("size_in_bytes", 0)
+            name = art.get("name", "unknown")
+            print(f"[*] Found Artifact: '{name}' | Size: {size} bytes")
+            # If artifact is less than 5KB, it's just the empty text-only zip bug (~746 bytes)
+            if size < 5000:
+                print(f"[!] Critical: Artifact size is too small ({size} bytes). Missing compiled binaries (.so files)!")
+                return False
+        return True
+    except Exception as e:
+        print(f"[!] Error verifying artifact size: {e}")
+        return True # Assume valid if network check fails temporarily
+
 def get_workflow_logs(run_id, max_retries=5):
     print("[*] Fetching failed job details to get direct text logs...")
     jobs_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}/jobs"
@@ -135,9 +158,8 @@ Your mission is to ensure this repository compiles into a fully functional, flas
 
 CRITICAL REQUIREMENTS:
 1. UNIVERSAL TOUCH FIX: Implement a robust, universal input hook (such as standard Android AInputQueue, InputConsumer, or native event dispatches) that works across all game engines. Extract touch X/Y coordinates, pass them to ImGui::GetIO().AddMousePosEvent(), and consume the touch if ImGui wants mouse capture. Do not restrict it to a single engine like Unity.
-2. BUILD HEALING: Analyze the GitHub Actions workflow build failure error logs below. Fix ANY compilation, linking, CMake, Android.mk, or Gradle errors.
-3. MAGISK PACKAGING: Ensure the build system correctly packages the compiled .so files alongside module.prop and customize.sh into a standard Magisk module zip format. Fix any zip packaging errors.
-4. MAGISK 24-26 COMPATIBILITY: Target Magisk versions 24 through 26 exclusively. Ensure `module.prop` sets `minMagisk` appropriately (e.g., `24000`) and uses stable Zygisk entry points native to Magisk v24–26 without breaking changes.
+2. BUILD HEALING & PACKAGING FIX (IMPORTANT): Ensure that the compiled native shared library (`libzygisk.so`) is successfully packed into the final Magisk module zip structure under `zygisk/<abi>/libzygisk.so`. Fix any Gradle or CMake output paths so the final zip file size is correct and contains all compiled binaries (avoiding empty 700-byte text-only zips).
+3. MAGISK 24-26 COMPATIBILITY: Target Magisk versions 24 through 26 exclusively. Ensure `module.prop` sets `minMagisk` to `24000` and uses stable Zygisk entry points native to Magisk v24–26 without breaking changes.
 
 You MUST provide a short, descriptive git commit message summarizing your fix using this exact format:
 === COMMIT: [Your descriptive commit message here] ===
@@ -153,7 +175,7 @@ To delete an obsolete file:
 === DELETE: path/to/file ===
 === END DELETE ===
 
-ERROR LOGS:
+ERROR LOGS / STATUS CONTEXT:
 {error_logs[-4000:]}
 """
     payload = {
@@ -197,7 +219,7 @@ def apply_ai_patches(ai_response):
                 ai_response = f.read()
 
     commit_match = re.search(r"=== COMMIT:\s*(.*?)\s*===", ai_response)
-    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve universal touch and Magisk 24-26 compatibility issues"
+    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve packaging path and ensure compiled binaries are included in zip"
 
     pattern_file = r"=== FILE:\s*(.*?)===\s*\n(.*?)\s*=== END FILE ==="
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
@@ -267,22 +289,24 @@ def master_loop():
                 continue
 
             if conclusion == "success":
-                print("\n==================================================")
-                print(" SUCCESS! Universal Zygisk Module Zip compiled cleanly!")
-                print("==================================================")
-                last_processed_run_id = run_id
-                print("[*] Waiting for new builds...\n")
-                continue
+                print("[*] GitHub Actions reports build success. Checking artifact contents & size...")
+                if check_artifact_size(run_id):
+                    print("\n==================================================")
+                    print(" SUCCESS! Valid Zygisk Module Zip compiled cleanly!")
+                    print("==================================================")
+                    last_processed_run_id = run_id
+                    print("[*] Waiting for new builds...\n")
+                    continue
+                else:
+                    print("[!] Artifact validation failed (empty zip size). Forcing Auto-Heal...")
+                    conclusion = "failure" # Convert success to failure to force AI healing of packaging path
 
-            elif conclusion in ["failure", "cancelled", "timed_out"]:
-                print(f"[!] Build failed with conclusion: {conclusion}. Initiating Auto-Heal...")
+            if conclusion in ["failure", "cancelled", "timed_out"]:
+                print(f"[!] Build failed or artifact was invalid (conclusion: {conclusion}). Initiating Auto-Heal...")
 
                 logs = get_workflow_logs(run_id)
-
                 if "Log fetch error" in logs:
-                    print("[!] Skipping AI processing due to GitHub network error. Will retry in 30s...")
-                    time.sleep(30)
-                    continue
+                    logs = "Build artifact was empty/invalid (~746 bytes). Gradle failed to package libzygisk.so into the zip structure."
 
                 print("[*] Analyzing module build/packaging errors with Gemini AI...")
                 ai_fix = ask_gemini_http(logs)

@@ -1,4 +1,25 @@
-plugins {
-    id 'com.android.application' version '8.2.0' apply false
-    id 'com.android.library' version '8.2.0' apply false
+```gradle
+android {
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+        }
+    }
+    
+    // Ensure binary is placed exactly where the module requires
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "libzygisk.so"
+        }
+    }
 }
+
+task createMagiskModule(type: Zip) {
+    from('module_template')
+    from('build/intermediates/cmake/release/obj') {
+        into 'zygisk'
+    }
+    archiveFileName = "MyModule_v1.zip"
+    destinationDirectory = file('dist')
+}
+```

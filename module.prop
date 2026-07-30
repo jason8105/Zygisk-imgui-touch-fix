@@ -1,7 +1,9 @@
-id=zygisk_imgui_touch_fix
-name=Zygisk ImGui Universal Touch Fix
-version=v1.0.0
-versionCode=100
-author=Elite Engineer
-description=Universal Zygisk ImGui menu with robust touch redirection supporting Unity, Unreal, and native engines (Magisk 24-26).
+```
+id=universal-imgui-hook
+name=Universal ImGui Overlay
+version=1.0
+versionCode=1
+author=Developer
+description=Universal touch-blocking ImGui hook for Zygisk.
 minMagisk=24000
+```
