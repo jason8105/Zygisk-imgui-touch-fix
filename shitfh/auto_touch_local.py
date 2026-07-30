@@ -1,66 +1,16 @@
 import os
-import sys
 import time
 import subprocess
 import requests
 import re
-import json
-import datetime
 
 # ==========================================
-# DUAL LOGGING SETUP (Display + File)
-# ==========================================
-LOG_DIR = "/storage/emulated/0/VMoutput/Magisk/my_repo"
-try:
-    os.makedirs(LOG_DIR, exist_ok=True)
-except Exception:
-    pass
-
-LOG_FILE = os.path.join(LOG_DIR, "script_history.txt")
-
-class TeeLogger:
-    def __init__(self, filename):
-        self.terminal = sys.stdout
-        self.log_file_path = filename
-        try:
-            self.log = open(filename, "a", encoding="utf-8")
-        except Exception:
-            self.log = None
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.terminal.flush()
-        if self.log:
-            try:
-                self.log.write(message)
-                self.log.flush()
-            except Exception:
-                pass
-
-    def flush(self):
-        self.terminal.flush()
-        if self.log:
-            try:
-                self.log.flush()
-            except Exception:
-                pass
-
-# Redirect stdout and stderr to both screen and file
-sys.stdout = TeeLogger(LOG_FILE)
-sys.stderr = sys.stdout
-
-print(f"[*] Logging initialized. Saving session history to: {LOG_FILE}")
-
-# ==========================================
-# LOCAL LLAMA SERVER CONFIGURATION
+# LOCAL LLAMA SERVER CONFIGURATION (Qwen)
 # ==========================================
 LOCAL_API_URL = "http://127.0.0.1:8080/v1/chat/completions"
 
-# ==========================================
-# MANUAL REPOSITORY SELECTION
-# ==========================================
-print("\n==================================================")
-print(" Full-Auto Local AI Zygisk Builder & Touch Fixer")
+print("==================================================")
+print(" Starting Local AI Master Healer (Qwen Mode)")
 print("==================================================")
 _owner = input("Enter GitHub Username/Owner (Press Enter for 'jason8105'): ").strip()
 REPO_OWNER = _owner if _owner else "jason8105"
@@ -70,7 +20,6 @@ REPO_NAME = _repo if _repo else "Zygisk-imgui-touch-fix"
 
 print(f"\n[*] Target Repository set to: {REPO_OWNER}/{REPO_NAME}")
 print("==================================================\n")
-# ==========================================
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
@@ -102,7 +51,6 @@ def get_latest_workflow_run():
         return None, None
 
 def check_artifact_size(run_id):
-    """Checks the generated workflow artifacts to ensure the zip is not empty/broken (~746 bytes)."""
     url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id) + "/artifacts"
     try:
         res = requests.get(url, headers=HEADERS, timeout=15).json()
@@ -192,11 +140,11 @@ ERROR LOGS / STATUS CONTEXT:
     payload = {
         "model": "qwen2.5-coder-7b-instruct",
         "messages": [
-            {"role": "system", "content": "You are an expert build fixing AI assistant."},
+            {"role": "system", "content": "You are a precise code-fixing machine. Output ONLY the file blocks using === FILE: path === and === END FILE ===. Do not write explanations."},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.2,
-        "max_tokens": 2048
+        "temperature": 0.1,
+        "max_tokens": 4096
     }
 
     print("[*] Asking Local AI (llama-server)...")
@@ -219,13 +167,11 @@ def apply_ai_patches(ai_response):
             with open("ai_fix_suggestion.txt", "r", encoding="utf-8") as f:
                 ai_response = f.read()
 
-    # Clean potential markdown code wrapper syntax around the response
     ai_response = re.sub(r"^```[a-zA-Z]*\n", "", ai_response, flags=re.MULTILINE)
 
     commit_match = re.search(r"=== COMMIT:\s*([^\n]+)\s*===", ai_response)
     commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve packaging path and ensure compiled binaries are included in zip"
 
-    # Enhanced Regex to gracefully capture file paths and contents even if formatting varies
     pattern_file = r"=== FILE:\s*([^\n]+)===\s*\n(.*?)(?==== FILE:|=== DELETE:|\Z)"
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
     
@@ -238,7 +184,6 @@ def apply_ai_patches(ai_response):
         file_path = file_path.strip().replace("\r", "").strip("`").strip()
         content = content.strip().replace("=== END FILE ===", "").strip()
         
-        # Remove inner markdown block wrappers if model enclosed file content in ```
         if content.startswith("```"):
             content = re.sub(r"^```[a-zA-Z]*\n", "", content)
         if content.endswith("```"):
@@ -304,7 +249,7 @@ def master_loop():
                 else:
                     print(f"[*] Build is {status}... waiting for it to finish...")
 
-            url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id)
+            url = "[https://api.github.com/repos/](https://api.github.com/repos/)" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id)
 
             try:
                 run_details = requests.get(url, headers=HEADERS, timeout=15).json()
@@ -334,7 +279,7 @@ def master_loop():
                 if "Log fetch error" in logs:
                     logs = "Build artifact was empty/invalid (~746 bytes). Gradle failed to package libzygisk.so into the zip structure."
 
-                print("[*] Analyzing module build/packaging errors with Local Qwen AI...")
+                print("[*] Analyzing errors with Local Qwen AI...")
                 ai_fix = ask_local_ai(logs)
 
                 print("[*] Automatically applying AI patches to local files...")
