@@ -1,34 +1,29 @@
-#include <jni.h>
-#include <android/log.h>
-#include <unistd.h>
 #include "zygisk.hpp"
-#include "input_hook.h"
-#include "imgui_impl.h"
+#include "touch_hook.hpp"
+#include "imgui_impl.hpp"
+#include <android/log.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <dlfcn.h>
+#include <GLES3/gl3.h>
 
-#define LOG_TAG "ZygiskMain"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOG_TAG "ZygiskZygote"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-class ZygiskModule : public zygisk::ModuleBase {
+class ZygiskImGuiModule : public zygisk::ModuleBase {
 public:
-    void onLoad(zygisk::Api *api, JNIEnv *env) override {
-        this->api = api;
-        this->env = env;
-        LOGI("ZygiskModule onLoad loaded successfully!");
-    }
-
     void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
-        // Intercept app specialization for Magisk v24-26 compatibility
-        InputHook::initHooks();
+        // Intercept app specialization in Zygisk v24-26
+        LOGD("preAppSpecialize invoked");
     }
 
     void postAppSpecialize(zygisk::AppSpecializeArgs *args) override {
-        LOGI("ZygiskModule postAppSpecialize executed.");
+        LOGD("postAppSpecialize invoked - initializing ImGui and Touch Hooks");
+        
+        // Initialize ImGui and Universal Touch Hook
+        ImGuiImpl::init();
+        TouchHook::initHooks();
     }
-
-private:
-    zygisk::Api *api = nullptr;
-    JNIEnv *env = nullptr;
 };
 
-static LibraryLoader g_loader;
-REGISTER_ZYGISK_MODULE(ZygiskModule)
+REGISTER_ZYGISK_MODULE(ZygiskImGuiModule)

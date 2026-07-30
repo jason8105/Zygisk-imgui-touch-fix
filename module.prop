@@ -1,7 +1,7 @@
-id=zygisk-imgui-touch-fix
-name=Zygisk ImGui Touch-Fixed Menu
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Universal Touch Fix
 version=v1.0.0
 versionCode=100
 author=Elite Engineer
-description=Universal Zygisk ImGui menu with robust AInputQueue touch interception supporting all game engines. Magisk 24-26 compatible.
+description=Universal Zygisk ImGui menu with robust multi-engine touch interception and fixed Magisk 24-26 packaging.
 minMagisk=24000
