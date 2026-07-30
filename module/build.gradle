@@ -4,13 +4,66 @@ plugins {
 
 android {
     namespace 'com.zygisk.imgui'
-    compileSdk 33
+    compileSdk 34
+
     defaultConfig {
         minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17"
+                cppFlags "-std=c++17 -frtti -fexceptions"
+                arguments "-DANDROID_STL=c++_shared"
             }
         }
     }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+}
+
+dependencies {
+}
+
+task buildMagiskModule(type: Zip) {
+    dependsOn 'assembleRelease'
+    archiveFileName = "Zygisk-ImGui-Universal-Touch-Fix.zip"
+    destinationDirectory = file("$buildDir/outputs/magisk")
+
+    from("$projectDir/src/main/magisk") {
+        include 'module.prop'
+        include 'customize.sh'
+        include 'post-fs-data.sh'
+    }
+
+    into("zygisk") {
+        from("$buildDir/intermediates/merged_native_libs/release/out/lib") {
+            include "armeabi-v7a/libzygisk.so"
+            include "arm64-v8a/libzygisk.so"
+            include "x86/libzygisk.so"
+            include "x86_64/libzygisk.so"
+        }
+    }
+}
+
+tasks.named('assembleRelease').configure {
+    finalizedBy('buildMagiskModule')
 }

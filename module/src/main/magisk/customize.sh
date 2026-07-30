@@ -1,17 +1,33 @@
-SKIPUNZIP=0
-ui_print "****************************************"
-ui_print "    Zygisk Unity ImGui Touch Fix        "
-ui_print "****************************************"
+ui_print "*************************************************"
+ui_print "     Zygisk ImGui Universal Touch-Fixed Menu     "
+ui_print "*************************************************"
 
-if [ "$ARCH" != "arm64" ]; then
-  abort "Error: Unsupported architecture ($ARCH). Only arm64-v8a is supported."
+if [ "$BOOTMODE" != true ]; then
+    abort "Error: Please install this module from within Magisk Manager / KernelSU / APatch while booted!"
 fi
 
-ui_print "- Installing Zygisk library..."
-mkdir -p "$MODPATH/zygisk"
-if [ -f "$MODPATH/zygisk/arm64-v8a/libzygisk_touch_fix.so" ]; then
-  mv "$MODPATH/zygisk/arm64-v8a/libzygisk_touch_fix.so" "$MODPATH/zygisk/arm64.so"
-  rm -rf "$MODPATH/zygisk/arm64-v8a"
+if [ -z "$ARCH" ] || [ -z "$API" ]; then
+    ui_print "Extracting system properties..."
+    ARCH=$(grep_prop ro.product.cpu.abi)
 fi
 
-ui_print "- Installation completed successfully!"
+ui_print "- Installing for architecture: $ARCH"
+ui_print "- Target API: $API"
+
+if [ "$API" -lt 24 ]; then
+    abort "Error: Minimum Android 7.0 (API 24) required!"
+fi
+
+ui_print "- Extracting module files..."
+unzip -o "$ZIPFILE" 'zygisk/*' -d "$MODPATH" >&2
+unzip -o "$ZIPFILE" 'module.prop' -d "$MODPATH" >&2
+unzip -o "$ZIPFILE" 'customize.sh' -d "$MODPATH" >&2
+
+set_perm_recursive "$MODPATH" 0 0 0755 0644
+if [ -d "$MODPATH/zygisk" ]; then
+    set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0755
+fi
+
+ui_print "*************************************************"
+ui_print " Installation Complete! Reboot Required.         "
+ui_print "*************************************************"

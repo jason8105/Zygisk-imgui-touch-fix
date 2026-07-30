@@ -1,20 +1,8 @@
-// Ensure the module is packaged correctly
-android {
-    defaultConfig {
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden"
-            }
-        }
-    }
-    
-    // Fix: Force copy to module path during assemble
-    applicationVariants.all { variant ->
-        variant.assembleProvider.get().doLast {
-            copy {
-                from "$buildDir/intermediates/cmake/release/obj/"
-                into "${projectDir}/module/zygisk/"
-            }
-        }
-    }
+plugins {
+    id 'com.android.application' version '8.2.0' apply false
+    id 'com.android.library' version '8.2.0' apply false
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }
