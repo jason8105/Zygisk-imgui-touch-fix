@@ -1,0 +1,7 @@
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Universal Touch Fix
+version=v1.0
+versionCode=1
+author=Developer
+description=Universal Zygisk ImGui Menu with robust touch interception across all game engines.
+minMagisk=24000

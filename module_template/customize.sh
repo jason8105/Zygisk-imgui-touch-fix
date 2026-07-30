@@ -1,7 +1,12 @@
-#!/sbin/sh
-# Magisk module install script
-ui_print "Installing Zygisk ImGui Touch Fix..."
-MODPATH=/data/adb/modules/zygisk_imgui
-mkdir -p $MODPATH/lib
-cp -f $ZIPFILE/lib/*.so $MODPATH/lib/
-set_perm_recursive $MODPATH 0 0 0755 0644
+SKIPUNZIP=0
+ui_print "****************************************"
+ui_print "    Zygisk ImGui Universal Touch Fix    "
+ui_print "****************************************"
+
+if [ "$ARCH" != "arm64" ] && [ "$ARCH" != "arm" ] && [ "$ARCH" != "x86" ] && [ "$ARCH" != "x64" ]; then
+  abort "! Unsupported platform: $ARCH"
+fi
+
+ui_print "- Extracting module files..."
+unzip -o "$ZIPFILE" 'zygisk/*' -d $MODPATH >&2
+ui_print "- Installation complete!"
