@@ -1,7 +1,7 @@
-id=zygisk-imgui-touch-fix
+id=zygisk-imgui-touch
 name=Universal ImGui Touch Fix
-version=v1.0.0
-versionCode=100
-author=Dev
-description=Universal touch fix for Zygisk ImGui menus.
+version=v1.0
+versionCode=1
+author=ExpertEngineer
+description=Universal touch-fixed ImGui menu for Zygisk.
 minMagisk=24000

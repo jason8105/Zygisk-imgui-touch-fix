@@ -1,7 +1,20 @@
-// Append this to your app/build.gradle
-task prepareMagiskModule(type: Copy) {
-    from("$buildDir/intermediates/cmake/release/obj")
-    into("$buildDir/magisk_module/zygisk")
-    include("**/libzygisk.so")
-    eachFile { f -> f.path = f.path.replaceAll(".*/libzygisk.so", "libzygisk.so") }
+// Ensure the module is packaged correctly
+android {
+    defaultConfig {
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -fvisibility=hidden"
+            }
+        }
+    }
+    
+    // Fix: Force copy to module path during assemble
+    applicationVariants.all { variant ->
+        variant.assembleProvider.get().doLast {
+            copy {
+                from "$buildDir/intermediates/cmake/release/obj/"
+                into "${projectDir}/module/zygisk/"
+            }
+        }
+    }
 }

@@ -1,23 +1,32 @@
-```cpp
 #include <jni.h>
 #include <android/input.h>
-#include "imgui.h"
+#include <imgui.h>
+#include "zygisk.hpp"
 
-// Pointer to original AInputQueue_preDispatchEvent
-int (*orig_AInputQueue_preDispatchEvent)(AInputQueue* queue, AInputEvent* event);
+// Universal touch hook using AInputQueue
+// Intercepts events before game engine processes them
+bool (*orig_preDispatchEvent)(AInputQueue* queue, AInputEvent* event);
 
-int hook_AInputQueue_preDispatchEvent(AInputQueue* queue, AInputEvent* event) {
+bool hook_preDispatchEvent(AInputQueue* queue, AInputEvent* event) {
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
         float x = AMotionEvent_getX(event, 0);
         float y = AMotionEvent_getY(event, 0);
-        int32_t action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
-
+        
         ImGuiIO& io = ImGui::GetIO();
         io.AddMousePosEvent(x, y);
-        io.AddMouseButtonEvent(0, (action != AMOTION_EVENT_ACTION_UP));
-
-        if (io.WantCaptureMouse) return 1; // Consume event
+        
+        // Consume touch if ImGui wants capture
+        if (io.WantCaptureMouse) return true; 
     }
-    return orig_AInputQueue_preDispatchEvent(queue, event);
+    return orig_preDispatchEvent(queue, event);
 }
-```
+
+// Zygisk entry point setup for Magisk 24-26
+class ImGuiModule : public zygisk::ModuleBase {
+public:
+    void onLoad(zygisk::Api* api, JNIEnv* env) override {
+        // Implementation of Dobby/HookZz goes here to patch AInputQueue_preDispatchEvent
+    }
+};
+
+REGISTER_ZYGISK_MODULE(ImGuiModule)
