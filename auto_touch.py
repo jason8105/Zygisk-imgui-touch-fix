@@ -137,6 +137,7 @@ CRITICAL REQUIREMENTS:
 1. UNIVERSAL TOUCH FIX: Implement a robust, universal input hook (such as standard Android AInputQueue, InputConsumer, or native event dispatches) that works across all game engines. Extract touch X/Y coordinates, pass them to ImGui::GetIO().AddMousePosEvent(), and consume the touch if ImGui wants mouse capture. Do not restrict it to a single engine like Unity.
 2. BUILD HEALING: Analyze the GitHub Actions workflow build failure error logs below. Fix ANY compilation, linking, CMake, Android.mk, or Gradle errors.
 3. MAGISK PACKAGING: Ensure the build system correctly packages the compiled .so files alongside module.prop and customize.sh into a standard Magisk module zip format. Fix any zip packaging errors.
+4. MAGISK 24-26 COMPATIBILITY: Target Magisk versions 24 through 26 exclusively. Ensure `module.prop` sets `minMagisk` appropriately (e.g., `24000`) and uses stable Zygisk entry points native to Magisk v24–26 without breaking changes.
 
 You MUST provide a short, descriptive git commit message summarizing your fix using this exact format:
 === COMMIT: [Your descriptive commit message here] ===
@@ -196,7 +197,7 @@ def apply_ai_patches(ai_response):
                 ai_response = f.read()
 
     commit_match = re.search(r"=== COMMIT:\s*(.*?)\s*===", ai_response)
-    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve universal touch and build configuration issues"
+    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve universal touch and Magisk 24-26 compatibility issues"
 
     pattern_file = r"=== FILE:\s*(.*?)===\s*\n(.*?)\s*=== END FILE ==="
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)

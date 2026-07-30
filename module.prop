@@ -1,0 +1,7 @@
+id=zygisk_imgui_touch_fix
+name=Universal Zygisk ImGui Menu
+version=v1.0.0
+versionCode=100
+author=Elite Engineer
+description=Universal ImGui menu with robust AInputQueue touch fix for all game engines.
+minMagisk=24000
