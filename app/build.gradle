@@ -3,29 +3,21 @@ plugins {
 }
 
 android {
-    namespace 'com.example.zygiskimgui'
-    compileSdk 34
+    namespace 'com.zygisk.imgui'
+    compileSdk 33
 
     defaultConfig {
-        applicationId "com.example.zygiskimgui"
+        applicationId "com.zygisk.imgui"
         minSdk 24
-        targetSdk 34
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
-                arguments "-DANDROID_STL=c++_static"
-                abiFilters "arm64-v8a", "armeabi-v7a"
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_shared"
             }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path "src/main/jni/CMakeLists.txt"
-            version "3.22.1"
         }
     }
 
@@ -35,27 +27,40 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 }
 
-// Custom task to package the Magisk Module
-tasks.register('packageMagiskModule', Zip) {
-    dependsOn 'externalNativeBuildRelease'
-    
-    archiveFileName = "Zygisk-ImGui-Universal.zip"
+task buildMagiskModule(type: Zip) {
+    dependsOn 'assembleRelease'
+
+    archiveFileName = "ZygiskImguiModule.zip"
     destinationDirectory = file("$buildDir/outputs/magisk")
 
-    // Magisk template files (module.prop, service.sh, etc.)
-    from('src/main/resources/magisk_template')
-    
-    // Package the compiled Zygisk binaries into the correct structure
-    into('zygisk/arm64-v8a') {
-        from "${project.buildDir}/intermediates/cmake/release/obj/arm64-v8a/libzygisk.so"
-    }
-    into('zygisk/armeabi-v7a') {
-        from "${project.buildDir}/intermediates/cmake/release/obj/armeabi-v7a/libzygisk.so"
+    from("$projectDir/src/main/magisk") {
+        include 'module.prop'
+        include 'customize.sh'
+        include 'post-fs-data.sh'
     }
 
-    doLast {
-        println "Magisk module created at: ${destinationDirectory.get()}/${archiveFileName.get()}"
+    // Pack compiled native libraries into correct Zygisk structure
+    into("zygisk") {
+        from("$buildDir/intermediates/cmake/release/obj") {
+            include "**/libzygisk.so"
+        }
     }
+}
+
+tasks.named('assembleRelease').configure {
+    finalizedBy('buildMagiskModule')
 }

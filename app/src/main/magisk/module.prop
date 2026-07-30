@@ -1,7 +1,7 @@
-id=zygisk_imgui_touch_fix
-name=Zygisk ImGui Universal Touch-Fixed Menu
-version=v1.0.0
-versionCode=100
-author=Elite Engineer
-description=A universal Zygisk ImGui menu module with robust touch injection supporting Unity, Unreal, and native C++ engines. Compatible with Magisk v24-26.
+id=zygisk_imgui_module
+name=Zygisk ImGui Universal Menu
+version=v1.0
+versionCode=1
+author=Developer
+description=Universal Zygisk ImGui Menu with cross-engine touch fix for Magisk v24-26.
 minMagisk=24000

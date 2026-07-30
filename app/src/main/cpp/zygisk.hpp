@@ -1,50 +1,60 @@
-#pragma once
+#ifndef ZYGISK_HPP
+#define ZYGISK_HPP
+
 #include <jni.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <sys/types.h>
 
 namespace zygisk {
 
-enum ApiVersion {
-    V1 = 1
+struct AppSpecializeArgs {
+    jint *uid;
+    jint *gid;
+    jobjectArray *gids;
+    jint *runtime_flags;
+    jobjectArray *zygisk_abi_list;
+    jstring *instruction_set;
+    jstring *app_data_dir;
+};
+
+struct ServerSpecializeArgs {
+    jint *uid;
+    jint *gid;
+    jobjectArray *gids;
+    jint *runtime_flags;
+    jlong *permitted_capabilities;
+    jlong *effective_capabilities;
 };
 
 class Api {
 public:
-    virtual int64_t getModuleVersion() = 0;
-    virtual void *pltHookRegister(const char *soname, const char *symbol, void *new_func, void **old_func) = 0;
-    virtual void *inlineHookRegister(void *symbol, void *new_func, void **old_func) = 0;
-    virtual void showToast(const char *message) = 0;
-    virtual int zc_disable_zygote_security() = 0;
-    virtual void *connOnModuleLoaded(const char *name, void *arg) = 0;
-    virtual void *connectCompanion() = 0;
-};
-
-class AppSpecializeArgs {
-public:
-};
-
-class ServerSpecializeArgs {
-public:
+    enum Option {
+        FEATURE_DLCLOSE_MODS = 0,
+        FORCE_DENYLIST_UNMOUNT = 1
+    };
+    virtual void setOption(Option opt) = 0;
+    virtual int hook_plt(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
+    virtual void *plt_safe_hook_symbol(const char *lib_name, const char *symbol, void *new_func) = 0;
+    virtual void inner_dlclose(void *handle) = 0;
 };
 
 class ModuleBase {
 public:
-    virtual void onPreAppSpecialize(AppSpecializeArgs *args) {}
-    virtual void onPostAppSpecialize(AppSpecializeArgs *args) {}
-    virtual void onPreServerSpecialize(ServerSpecializeArgs *args) {}
-    virtual void onPostServerSpecialize(ServerSpecializeArgs *args) {}
+    virtual ~ModuleBase() {}
+    virtual void onLoad(Api *api, JNIEnv *env) {}
+    virtual void preAppSpecialize(AppSpecializeArgs *args) {}
+    virtual void postAppSpecialize(AppSpecializeArgs *args) {}
+    virtual void preServerSpecialize(ServerSpecializeArgs *args) {}
+    virtual void postServerSpecialize(ServerSpecializeArgs *args) {}
 };
 
 } // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-    static void *zygisk_module_init_impl(zygisk::Api *api, JNIEnv *env) { \
-        auto *mod = new clazz(); \
-        mod->init(api, env); \
-        return mod; \
+    static clazz __zygisk_module; \
+    extern "C" __attribute__((visibility("default"))) void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+        __zygisk_module.onLoad(api, env); \
     } \
-    extern "C" __attribute__((visibility("default"))) __attribute__((used)) \
-    void zygisk_module_init(zygisk::Api *api, JNIEnv *env) { \
-        zygisk_module_init_impl(api, env); \
+    extern "C" __attribute__((visibility("default"))) void zygisk_companion_entry(int client) { \
     }
+
+#endif // ZYGISK_HPP
