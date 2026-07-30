@@ -1,0 +1,7 @@
+id=zygisk_imgui_universal
+name=Zygisk Universal ImGui Menu
+version=v1.0
+versionCode=1
+author=EliteEngineer
+description=Universal ImGui Menu with NDK Input Hooking for all game engines.
+minMagisk=24000
