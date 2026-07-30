@@ -253,7 +253,8 @@ ERROR LOGS / STATUS CONTEXT:
         if not active_key:
             continue
             
-        print(f"\n[*] Trying API Key ID: {key_id}")
+        print(f"\n[*] Trying API Key ID: {key_id} (Key hint: ...{active_key[-4:]})")
+
         
         for model_name in MODELS_POOL:
             url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={active_key}"
