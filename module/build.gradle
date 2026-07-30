@@ -1,64 +1,16 @@
 plugins {
-    id 'com.android.application'
+    id 'com.android.library'
 }
 
 android {
-    namespace 'com.zygisktouchfix.module'
-    compileSdk 34
-
+    namespace 'com.zygisk.imgui'
+    compileSdk 33
     defaultConfig {
-        applicationId "com.zygisktouchfix.module"
-        minSdk 26
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-
+        minSdk 24
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++17"
-                arguments "-DANDROID_STL=c++_shared"
             }
         }
-    }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-}
-
-task buildZygiskModule(type: Zip) {
-    dependsOn 'assembleRelease'
-    archiveFileName = "Zygisk-ImGui-TouchFix.zip"
-    destinationDirectory = file("$buildDir/outputs/zip")
-
-    // Create Magisk module structure
-    from("$buildDir/intermediates/merged_native_libs/release/out/lib") {
-        into("zygisk")
-    }
-    
-    from("src/main/magisk") {
-        include "module.prop"
-        include "customize.sh"
-        include "post-fs-data.sh"
-        include "service.sh"
     }
 }
