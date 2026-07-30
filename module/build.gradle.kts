@@ -3,82 +3,89 @@ plugins {
 }
 
 android {
-    namespace = "com.zygisk.touchfix"
+    namespace = "com.zygisk.imguitouchfix"
     compileSdk = 34
 
     defaultConfig {
         minSdk = 26
         targetSdk = 34
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles("consumer-rules.pro")
-        
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
                 arguments += "-DANDROID_STL=c++_shared"
             }
         }
-    }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+        
+        ndk {
+            abiFilters.addAll(setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
     }
-    
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
     }
-    
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
     }
 }
 
-dependencies {
-    implementation("androidx.appcompat:appcompat:1.6.1")
-}
-
-val createMagiskModuleZip by tasks.registering(Zip::class) {
+tasks.register<Zip>("packageZygiskModule") {
     dependsOn("assembleRelease")
-    archiveFileName.set("Zygisk-Touch-Fix-Module.zip")
-    destinationDirectory.set(file("$buildDir/outputs/magisk"))
+    archiveFileName.set("zygisk-imgui-touch-fix.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("outputs/magisk"))
 
-    val stagingDir = file("$buildDir/staging")
+    val compiledDir = layout.buildDirectory.dir("intermediates/cmake/release/obj")
+    
     doFirst {
-        stagingDir.deleteRecursively()
-        stagingDir.mkdirs()
+        val baseDir = layout.buildDirectory.dir("tmp/magisk_staging").get().asFile
+        if (baseDir.exists()) baseDir.deleteRecursively()
+        baseDir.mkdirs()
 
-        // Create standard Magisk module structure
-        file("$stagingDir/META-INF/com/google/android").mkdirs()
+        // Create module structure
+        file("$baseDir/META-INF/com/google/android").mkdirs()
+        file("$baseDir/zygisk").mkdirs()
+
+        // module.prop
+        file("$baseDir/module.prop").writeText(
+            """
+            id=zygisk_imgui_touch_fix
+            name=Zygisk ImGui Universal Touch Fix
+            version=v1.0.0
+            versionCode=100
+            author=EliteEngineer
+            description=Universal ImGui menu overlay with robust touch input interception for all game engines (Unity, Unreal, Native).
+            minMagisk=24000
+            """.trimIndent()
+        )
+
+        // customize.sh & service.sh if needed
+        file("$baseDir/customize.sh").writeText("SKIPUNZIP=0\n")
+
+        // Copy shared libraries into zygisk/<abi>/libzygisk.so
+        val objDir = compiledDir.get().asFile
+        if (objDir.exists()) {
+            objDir.listFiles()?.forEach { abiDir ->
+                if (abiDir.isDirectory) {
+                    val targetAbiDir = file("$baseDir/zygisk/${abiDir.name}")
+                    targetAbiDir.mkdirs()
+                    abiDir.listFiles { _, name -> name == "libzygisk.so" }?.forEach { lib ->
+                        lib.copyTo(file("${targetAbiDir.absolutePath}/libzygisk.so"), overwrite = true)
+                    }
+                }
+            }
+        }
         
-        // Copy module configuration
-        if (file("src/main/magisk/module.prop").exists()) {
-            file("src/main/magisk/module.prop").copyTo(file("$stagingDir/module.prop"))
-        }
-        if (file("src/main/magisk/customize.sh").exists()) {
-            file("src/main/magisk/customize.sh").copyTo(file("$stagingDir/customize.sh"))
-        }
-
-        // Copy compiled native libraries for Zygisk (zygisk/arm64-v8a.so, etc.)
-        val libsDir = file("$buildDir/intermediates/merged_native_libs/release/out/lib")
-        if (libsDir.exists()) {
-            libsDir.copyRecursively(file("$stagingDir/zygisk"), true)
-        }
+        from(baseDir)
     }
-
-    from(stagingDir)
 }
 
-tasks.named("build") {
-    dependsOn(createMagiskModuleZip)
+tasks.named("assembleRelease").configure {
+    finalizedBy("packageZygiskModule")
 }
