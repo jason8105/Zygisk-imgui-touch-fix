@@ -3,20 +3,21 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui'
-    compileSdk 33
+    namespace 'com.example.zygiskimgui'
+    compileSdk 34
 
     defaultConfig {
-        applicationId "com.zygisk.imgui"
+        applicationId "com.example.zygiskimgui"
         minSdk 24
-        targetSdk 33
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17"
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
                 arguments "-DANDROID_STL=c++_shared"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
         }
     }
@@ -30,45 +31,33 @@ android {
 
     externalNativeBuild {
         cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
-    }
-
-    sourceSets {
-        main {
-            jniLibs.srcDirs = ['src/main/jniLibs']
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
         }
     }
 }
 
-dependencies {
-    implementation 'androidx.core:core-ktx:1.9.0'
-}
-
-task buildMagiskModule(type: Zip) {
-    dependsOn 'assembleRelease'
-    archiveFileName = 'Zygisk-ImGui-Universal-Module.zip'
-    destinationDirectory = file("$buildDir/outputs/magisk")
-
-    from("$projectDir/src/main/magisk") {
-        include 'module.prop'
-        include 'customize.sh'
-        include 'post-fs-data.sh'
-        include 'service.sh'
-    }
-
-    into('zygisk') {
-        from("$buildDir/intermediates/cmake/release/obj") {
-            include 'armeabi-v7a/libzygisk.so'
-            include 'arm64-v8a/libzygisk.so'
-            include 'x86/libzygisk.so'
-            include 'x86_64/libzygisk.so'
+android.applicationVariants.all { variant ->
+    def variantName = variant.name.capitalize()
+    def zipTask = tasks.register("packageMagiskModule${variantName}", Zip) {
+        dependsOn variant.externalNativeBuildTasks
+        
+        from("src/main/resources") {
+            include "module.prop"
+            include "verify.sh"
         }
+
+        // Map the compiled libs to the Zygisk directory structure
+        def buildOutDir = file("${project.buildDir}/intermediates/cmake/${variant.name}/obj")
+        
+        into("zygisk/arm64-v8a") {
+            from("${buildOutDir}/arm64-v8a/libzygisk.so")
+        }
+        into("zygisk/armeabi-v7a") {
+            from("${buildOutDir}/armeabi-v7a/libzygisk.so")
+        }
+        
+        archiveFileName = "Zygisk-ImGui-${variant.name}.zip"
+        destinationDirectory = file("${project.buildDir}/outputs/magisk")
     }
 }
-
-tasks.named('assembleRelease').configure {
-    finalizedBy('buildMagiskModule')
-}
-=== END FILE: app/build.gradle ===
