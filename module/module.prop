@@ -1,7 +1,7 @@
-id=universal-imgui-touch-fix
+id=zygisk_imgui_universal
 name=Universal ImGui Touch Fix
-version=v1.0
-versionCode=1
+version=1.0.0
+versionCode=100
 author=BuildEngineer
-description=Universal Zygisk ImGui input bridge for Unity, Unreal, and Native games.
+description=Universal touch-blocking ImGui menu for Zygisk.
 minMagisk=24000
