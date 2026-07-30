@@ -2,9 +2,10 @@
 #include <android/input.h>
 #include "imgui.h"
 
-// Universal Input Hook: Intercepting AInputQueue_preDispatchEvent
-// This works across Unity, Unreal, and Native engines as they all process AInputQueue
-bool Hook_InputEvent(AInputEvent* event) {
+// Pointer to the original dispatch function
+bool (*orig_AInputQueue_preDispatchEvent)(AInputQueue* queue, AInputEvent* event);
+
+bool hooked_AInputQueue_preDispatchEvent(AInputQueue* queue, AInputEvent* event) {
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
         float x = AMotionEvent_getX(event, 0);
         float y = AMotionEvent_getY(event, 0);
@@ -12,10 +13,9 @@ bool Hook_InputEvent(AInputEvent* event) {
 
         ImGuiIO& io = ImGui::GetIO();
         io.AddMousePosEvent(x, y);
-        io.AddMouseButtonEvent(0, (action != AMOTION_EVENT_ACTION_UP));
+        io.AddMouseButtonEvent(0, action != AMOTION_EVENT_ACTION_UP);
 
-        // If ImGui wants the touch, consume it to prevent game/engine interaction
-        if (io.WantCaptureMouse) return true;
+        if (io.WantCaptureMouse) return true; // Consume event
     }
-    return false;
+    return orig_AInputQueue_preDispatchEvent(queue, event);
 }

@@ -1,7 +1,7 @@
-id=zygisk_imgui_universal
-name=Zygisk ImGui Universal Input Fix
+id=zygisk_imgui_touch_fix
+name=Universal ImGui Touch Fix
 version=v1.0
 versionCode=1
-author=Engineer
-description=Universal ImGui touch hooking for all game engines.
+author=BuildEngineer
+description=Universal ImGui touch interception for Zygisk.
 minMagisk=24000
