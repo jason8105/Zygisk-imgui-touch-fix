@@ -1,80 +1,20 @@
-plugins {
-    id 'com.android.library'
-}
-
-android {
-    namespace 'com.zygisk.imgui'
-    compileSdk 33
-
-    defaultConfig {
-        minSdk 24
-        targetSdk 33
-        versionCode 100
-        versionName "1.0.0"
-
-        consumerProguardFiles "consumer-rules.pro"
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -fno-rtti -fno-exceptions"
-                arguments "-DANDROID_STL=c++_shared"
-            }
-        }
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
     }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.2'
     }
 }
 
-dependencies {
-}
-
-task prepareMagiskModule(type: Copy) {
-    dependsOn 'assembleRelease'
-    
-    // Copy built shared libraries into the Magisk module zip layout
-    from("${layout.buildDirectory.dir('intermediates/cmake/release/obj')}") {
-        include '**/libzygisk.so'
-        into 'zygisk'
-    }
-    
-    // Fallback path if intermediates output differs
-    from("${layout.buildDirectory.dir('outputs/native_debug_symbol/release/out/lib')}") {
-        include '**/libzygisk.so'
-        into 'zygisk'
-    }
-
-    into file("$buildDir/magisk_module")
-}
-
-task buildMagiskZip(type: Zip) {
-    dependsOn prepareMagiskModule
-    archiveFileName = "zygisk_imgui_menu_release.zip"
-    destinationDirectory = file("$buildDir/outputs/apk/release")
-    
-    from("$buildDir/magisk_module") {
-        include 'zygisk/**'
-    }
-    
-    // Include base module configuration files if available or generate defaults
-    from(file('.')) {
-        include 'module.prop'
-        include 'post-fs-data.sh'
-        include 'service.sh'
-        include 'customize.sh'
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
     }
 }
 
-tasks.named('assembleRelease').configure {
-    finalizedBy('buildMagiskZip')
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }

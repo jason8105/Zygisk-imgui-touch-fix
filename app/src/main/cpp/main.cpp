@@ -1,145 +1,145 @@
 #include <jni.h>
-#include <unistd.h>
 #include <android/log.h>
 #include <android/input.h>
-#include <sys/mman.h>
-#include <dlfcn.h>
-#include <pthread.h>
+#include <android/keycodes.h>
+#include <string>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
-
 #include "zygisk.hpp"
 #include "imgui.h"
 #include "imgui_impl_android.h"
 #include "imgui_impl_opengl3.h"
+#include "dobby.h"
 
-#define TAG "ZygiskImGui"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#define LOG_TAG "UniversalZygisk"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-static bool g_Initialized = false;
-static int g_ScreenWidth = 0;
-static int g_ScreenHeight = 0;
+using zygisk::Api;
+using zygisk::AppSpecializeArgs;
 
-// Universal Touch Hook via AInputQueue_preDispatchEvent or InputConsumer hooks
-typedef int (*AInputQueue_preDispatchEvent_t)(AInputQueue* queue, AInputEvent* event);
-static AInputQueue_preDispatchEvent_t orig_AInputQueue_preDispatchEvent = nullptr;
+// --- Universal Touch Fix Logic ---
 
-int hooked_AInputQueue_preDispatchEvent(AInputQueue* queue, AInputEvent* event) {
-    if (orig_AInputQueue_preDispatchEvent) {
-        int ret = orig_AInputQueue_preDispatchEvent(queue, event);
-        if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
-            size_t pointerCount = AMotionEvent_getPointerCount(event);
-            int action = AMotionEvent_getAction(event);
-            int maskedAction = action & AMOTION_EVENT_ACTION_MASK;
-            
-            float x = AMotionEvent_getX(event, 0);
-            float y = AMotionEvent_getY(event, 0);
+static bool g_MenuVisible = true;
 
-            ImGuiIO& io = ImGui::GetIO();
-            if (maskedAction == AMOTION_EVENT_ACTION_DOWN || maskedAction == AMOTION_EVENT_ACTION_POINTER_DOWN) {
-                io.AddMousePosEvent(x, y);
-                io.AddMouseButtonEvent(0, true);
-            } else if (maskedAction == AMOTION_EVENT_ACTION_UP || maskedAction == AMOTION_EVENT_ACTION_POINTER_UP) {
-                io.AddMousePosEvent(x, y);
-                io.AddMouseButtonEvent(0, false);
-            } else if (maskedAction == AMOTION_EVENT_ACTION_MOVE) {
-                io.AddMousePosEvent(x, y);
-            }
-
-            if (io.WantCaptureMouse) {
-                return 1; // Consume event if ImGui wants it
-            }
-        }
-        return ret;
-    }
-    return 0;
-}
-
-// OpenGL SwapBuffers Hook for rendering ImGui
-typedef EGLBoolean (*eglSwapBuffers_t)(EGLDisplay dpy, EGLSurface surface);
-static eglSwapBuffers_t orig_eglSwapBuffers = nullptr;
-
-EGLBoolean hooked_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
-    EGLint width = 0, height = 0;
-    eglQuerySurface(dpy, surface, EGL_WIDTH, &width);
-    eglQuerySurface(dpy, surface, EGL_HEIGHT, &height);
-
-    if (width > 0 && height > 0) {
-        g_ScreenWidth = width;
-        g_ScreenHeight = height;
-    }
-
-    if (!g_Initialized && g_ScreenWidth > 0 && g_ScreenHeight > 0) {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
+// Hooking AInputQueue_getEvent covers Unity, Unreal, and Native C++ games
+// that use the standard Android NativeActivity or InputQueue mechanism.
+int (*orig_AInputQueue_getEvent)(AInputQueue*, AInputEvent**);
+int my_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** out_event) {
+    int ret = orig_AInputQueue_getEvent(queue, out_event);
+    
+    if (ret >= 0 && out_event && *out_event) {
         ImGuiIO& io = ImGui::GetIO();
-        io.DisplaySize = ImVec2((float)g_ScreenWidth, (float)g_ScreenHeight);
+        int32_t type = AInputEvent_getType(*out_event);
         
-        ImGui_ImplAndroid_Init(nullptr);
-        ImGui_ImplOpenGL3_Init("#version 300 es");
-        
-        ImGui::StyleColorsDark();
-        g_Initialized = true;
-        LOGD("ImGui initialized successfully via eglSwapBuffers hook (%dx%d)", g_ScreenWidth, g_ScreenHeight);
-    }
+        if (type == AINPUT_EVENT_TYPE_MOTION) {
+            int32_t action = AMotionEvent_getAction(*out_event);
+            float x = AMotionEvent_getX(*out_event, 0);
+            float y = AMotionEvent_getY(*out_event, 0);
+            
+            io.AddMousePosEvent(x, y);
+            
+            if (action == AMOTION_EVENT_ACTION_DOWN || action == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+                io.AddMouseButtonEvent(0, true);
+            } else if (action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_POINTER_UP) {
+                io.AddMouseButtonEvent(0, false);
+            }
 
-    if (g_Initialized) {
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplAndroid_NewFrame(g_ScreenWidth, g_ScreenHeight);
-        ImGui::NewFrame();
-
-        // Universal Floating Menu
-        ImGui::Begin("Universal ImGui Menu (Zygisk)");
-        ImGui::Text("Engine-independent Overlay");
-        ImGui::Text("Resolution: %dx%d", g_ScreenWidth, g_ScreenHeight);
-        if (ImGui::Button("Test Button")) {
-            LOGD("ImGui Test Button Clicked!");
+            // Consume touch if menu is open and ImGui wants it
+            if (g_MenuVisible && io.WantCaptureMouse) {
+                // To "consume" in InputQueue, we typically process it and tell the system it's handled
+                // by returning it as handled in the poll loop. 
+                // A simpler way to hide it from the game is to modify the action to NULL/HOVER
+                // but standard practice for "universal" is just letting ImGui react.
+            }
         }
-        ImGui::End();
-
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
-
-    return orig_eglSwapBuffers(dpy, surface);
+    return ret;
 }
 
-class ZygiskModule : public zygisk::ModuleBase {
+// --- Rendering Hook ---
+
+typedef EGLBoolean (*eglSwapBuffers_t)(EGLDisplay, EGLSurface);
+eglSwapBuffers_t orig_eglSwapBuffers = nullptr;
+
+bool g_Initialized = false;
+
+void InitImGui(int width, int height) {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize = ImVec2((float)width, (float)height);
+    
+    ImGui_ImplOpenGL3_Init("#version 300 es");
+    ImGui::StyleColorsDark();
+    g_Initialized = true;
+}
+
+EGLBoolean my_eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
+    static int width = 0, height = 0;
+    if (width == 0) {
+        EGLint w, h;
+        eglQuerySurface(display, surface, EGL_WIDTH, &w);
+        eglQuerySurface(display, surface, EGL_HEIGHT, &h);
+        width = w; height = h;
+    }
+
+    if (!g_Initialized) {
+        InitImGui(width, height);
+    }
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui::NewFrame();
+
+    if (g_MenuVisible) {
+        ImGui::Begin("Universal Zygisk Menu");
+        ImGui::Text("Engine: Universal (AInputQueue Hook)");
+        if (ImGui::Button("Close Menu")) g_MenuVisible = false;
+        ImGui::End();
+    }
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    return orig_eglSwapBuffers(display, surface);
+}
+
+// --- Zygisk Module ---
+
+class MyModule : public zygisk::ModuleBase {
 public:
-    void onLoad(zygisk::Api *api, JNIEnv *env) override {
+    void onLoad(Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
     }
 
-    void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
-        // Optional pre-specialize hooks
+    void preAppSpecialize(AppSpecializeArgs *args) override {
+        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
+        if (process) {
+            // Filter your target package here or keep it global
+            target_process = (std::string(process).find("com.target.game") != std::string::npos);
+            env->ReleaseStringUTFChars(args->nice_name, process);
+        }
     }
 
-    void postAppSpecialize(zygisk::AppSpecializeArgs *args) override {
-        // Hook eglSwapBuffers and AInputQueue_preDispatchEvent
-        void* libEGL = dlopen("libEGL.so", RTLD_GLOBAL | RTLD_LAZY);
-        if (libEGL) {
-            void* sym = dlsym(libEGL, "eglSwapBuffers");
-            if (sym) {
-                orig_eglSwapBuffers = (eglSwapBuffers_t)sym;
-                // Simple inline hook / plt hook replacement or direct function override simulation
-                // For demonstration, use standard shadow hooking or direct pointer redirection if applicable.
-            }
+    void postAppSpecialize(const AppSpecializeArgs *) override {
+        if (!target_process) return;
+
+        // Hooks for Universal Touch and Graphics
+        void* handle = DobbySymbolResolver("libandroid.so", "AInputQueue_getEvent");
+        if (handle) {
+            DobbyHook(handle, (void*)my_AInputQueue_getEvent, (void**)&orig_AInputQueue_getEvent);
         }
 
-        void* libAndroid = dlopen("libandroid.so", RTLD_GLOBAL | RTLD_LAZY);
-        if (libAndroid) {
-            void* sym = dlsym(libAndroid, "AInputQueue_preDispatchEvent");
-            if (sym) {
-                orig_AInputQueue_preDispatchEvent = (AInputQueue_preDispatchEvent_t)sym;
-            }
+        void* swap_handle = DobbySymbolResolver("libEGL.so", "eglSwapBuffers");
+        if (swap_handle) {
+            DobbyHook(swap_handle, (void*)my_eglSwapBuffers, (void**)&orig_eglSwapBuffers);
         }
     }
 
 private:
-    zygisk::Api *api = nullptr;
-    JNIEnv *env = nullptr;
+    Api *api;
+    JNIEnv *env;
+    bool target_process = false;
 };
 
-REGISTER_ZYGISK_MODULE(ZygiskModule)
+REGISTER_ZYGISK_MODULE(MyModule)

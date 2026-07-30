@@ -1,24 +1,23 @@
 plugins {
-    id 'com.android.library'
+    id 'com.android.application'
 }
 
 android {
-    namespace 'com.zygisk.imgui'
-    compileSdk 33
+    namespace 'com.universal.zygisk.imgui'
+    compileSdk 34
 
     defaultConfig {
+        applicationId "com.universal.zygisk.imgui"
         minSdk 24
-        targetSdk 33
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles "consumer-rules.pro"
-        
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -frtti -fexceptions"
-                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -fvisibility=hidden -fomit-frame-pointer -O3"
+                arguments "-DANDROID_STL=c++_static"
+                abiFilters "armeabi-v7a", "arm64-v8a"
             }
         }
     }
@@ -32,42 +31,40 @@ android {
 
     externalNativeBuild {
         cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
         }
     }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+    
+    packagingOptions {
+        doNotStrip "**/libzygisk.so"
     }
 }
 
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-}
-
-// Task to assemble the compiled native libraries into a flashable Magisk Zygisk module zip
-task buildZygiskModule(type: Zip, dependsOn: ['assembleRelease']) {
-    archiveFileName = "Zygisk-ImGui-TouchFix-Module.zip"
+// Custom task to create the flashable Magisk zip
+task packageMagiskModule(type: Zip) {
+    archiveFileName = "UniversalZygiskImGui.zip"
     destinationDirectory = file("$buildDir/outputs/magisk")
 
-    def strippedDir = "$buildDir/intermediates/merged_native_libs/release/out/lib"
-    
-    // Fallback directory if merged_native_libs differs across AGP versions
-    from("$buildDir/intermediates/cmake/release/obj") {
-        into "zygisk"
-    }
-    
-    // Include module configuration files
-    from("src/main/magisk") {
+    // 1. Add module metadata
+    from("src/main/resources") {
         include "module.prop"
-        include "service.sh"
         include "post-fs-data.sh"
-        include "action.sh"
+        include "service.sh"
+    }
+
+    // 2. Add compiled Zygisk libraries to the correct Magisk structure
+    // We iterate through built ABIs
+    def abiList = ["arm64-v8a", "armeabi-v7a"]
+    abiList.each { abi ->
+        from("$buildDir/intermediates/cmake/release/obj/${abi}") {
+            include "libzygisk.so"
+            into "zygisk/${abi}"
+        }
     }
 }
 
-tasks.named('build').configure {
-    finalizedBy('buildZygiskModule')
+// Ensure the zip task runs after the native build
+afterEvaluate {
+    packageMagiskModule.dependsOn assembleRelease
 }

@@ -1,0 +1,7 @@
+id=zygisk_imgui_universal
+name=Universal Zygisk ImGui Menu
+version=v1.0
+versionCode=1000
+author=EliteEngineer
+description=A universal ImGui overlay with fixed touch support for all engines (Unity, Unreal, C++) via Zygisk.
+minMagisk=24000
