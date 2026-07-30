@@ -3,19 +3,19 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisktouch.mod'
-    compileSdk 34
+    namespace 'com.zygisk.imgui'
+    compileSdk 33
 
     defaultConfig {
-        applicationId "com.zygisktouch.mod"
+        applicationId "com.zygisk.imgui"
         minSdk 24
-        targetSdk 34
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17"
+                cppFlags "-std=c++17 -frtti -fexceptions"
                 arguments "-DANDROID_STL=c++_shared"
             }
         }
@@ -35,43 +35,42 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
+    ndkVersion '25.1.8937393'
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.9.0'
 }
 
-import org.apache.tools.zip.ZipEntry
-import org.apache.tools.zip.ZipOutputStream
-
+// Task to assemble Magisk module zip including the compiled shared libraries under zygisk/<abi>/libzygisk.so
 task buildMagiskModule(type: Zip) {
     dependsOn 'assembleRelease'
-    archiveFileName = "Zygisk-ImGui-TouchFix-Module.zip"
+    archiveFileName = 'zygisk-imgui-release.zip'
     destinationDirectory = file("$buildDir/outputs/magisk")
 
+    // Base magisk structure
     from("$projectDir/src/main/magisk") {
-        include "module.prop"
-        include "customize.sh"
-        include "post-fs-data.sh"
-        include "service.sh"
+        include 'module.prop'
+        include 'customize.sh'
+        include 'post-fs-data.sh'
+        include 'service.sh'
     }
 
-    into("zygisk") {
-        from("$buildDir/intermediates/cmake/release/obj") {
-            include "armeabi-v7a/libzygisk.so"
-            include "arm64-v8a/libzygisk.so"
-            include "x86/libzygisk.so"
-            include "x86_64/libzygisk.so"
-        }
+    // Map compiled native libraries to Zygisk ABIs
+    into("zygisk/armeabi-v7a") {
+        from "$buildDir/intermediates/cmake/release/obj/armeabi-v7a/libzygisk.so"
+    }
+    into("zygisk/arm64-v8a") {
+        from "$buildDir/intermediates/cmake/release/obj/arm64-v8a/libzygisk.so"
+    }
+    into("zygisk/x86") {
+        from "$buildDir/intermediates/cmake/release/obj/x86/libzygisk.so"
+    }
+    into("zygisk/x86_64") {
+        from "$buildDir/intermediates/cmake/release/obj/x86_64/libzygisk.so"
     }
 }
 
-tasks.whenTaskAdded { task ->
-    if (task.name == 'bundleRelease' || task.name == 'assembleRelease') {
-        task.finalizedBy('buildMagiskModule')
-    }
+tasks.named('assemble') {
+    finalizedBy 'buildMagiskModule'
 }

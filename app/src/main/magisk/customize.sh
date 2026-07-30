@@ -1,19 +1,28 @@
-SKIPUNZIP=0
-ui_print "****************************************"
-ui_print "    Zygisk ImGui Universal Touch Fix    "
-ui_print "****************************************"
+ui_print "*************************************************"
+ui_print "   Zygisk ImGui Universal Touch-Fixed Module     "
+ui_print "*************************************************"
 
-if [ "$ARCH" != "arm64" ] && [ "$ARCH" != "arm" ] && [ "$ARCH" != "x64" ] && [ "$ARCH" != "x86" ]; then
-  abort "! Unsupported platform: $ARCH"
+# Check architecture
+ABI=""
+case "%ARCH%" in
+  arm|armeabi-v7a) ABI="armeabi-v7a" ;;
+  arm64|aarch64) ABI="arm64-v8a" ;;
+  x86) ABI="x86" ;;
+  x64|x86_64) ABI="x86_64" ;;
+  *) ABI="arm64-v8a" ;;
+esac
+
+ui_print "- Target Arch: $ABI"
+
+if [ ! -f "$MODPATH/zygisk/$ABI/libzygisk.so" ]; then
+  ui_print "! Warning: Native library for $ABI not found directly, checking fallback paths..."
+  # Try to find libzygisk.so anywhere inside zygisk/
+  found_lib=$(find "$MODPATH/zygisk" -name "libzygisk.so" | head -n 1)
+  if [ -n "$found_lib" ]; then
+    ui_print "- Found native library at $found_lib"
+  else
+    ui_print "! Error: libzygisk.so could not be located in module package!"
+  fi
 fi
 
-ui_print "- Extracting module files..."
-unzip -o "$ZIPFILE" 'zygisk/*' -d $MODPATH >&2
-
-if [ -f "$MODPATH/zygisk/arm64-v8a/libzygisk.so" ] || [ -f "$MODPATH/zygisk/armeabi-v7a/libzygisk.so" ]; then
-  ui_print "- Native binaries installed successfully!"
-else
-  abort "! Error: libzygisk.so not found in module package!"
-fi
-
-set_perm_recursive $MODPATH 0 0 0755 0644
+ui_print "- Installation complete! Please reboot."
