@@ -1,76 +1,45 @@
-#ifndef ZYGISK_HPP
-#define ZYGISK_HPP
+#pragma once
 
-#include <jni.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 namespace zygisk {
 
-struct AppSpecializeArgs {
-    JNIEnv *env;
-    jint *uid;
-    jint *gid;
-    jint **gids;
-    jint *rt_nice;
-    jobjectArray *seclabel;
-    jstring *app_data_dir;
-    jint *inet;
-    jint *outer_appid;
-    jint *is_isolated;
-    jobjectArray *pkg_name;
-    jstring *hosting_type;
-    jstring *hosting_name_is_service;
-    jint *disabled_modules;
-};
-
-struct ServerSpecializeArgs {
-    JNIEnv *env;
-    jint *uid;
-    jint *gid;
-    jint **gids;
-    jint *rt_nice;
-    jobjectArray *seclabel;
-};
-
 class Api {
 public:
-    enum Flag {
-        overlay_dlclose = (1 << 0)
+    enum State {
+        DLOPEN_FAILED = 0,
+        OK = 1
     };
-    
-    virtual void *dlopen(const char *filename, int flag) = 0;
-    virtual void *dlsym(void *handle, const char *symbol) = 0;
-    virtual void plt_hook_register(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
-    virtual bool plt_hook_commit() = 0;
-    virtual int ez_hook(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
-    virtual void set_shaded_storage() = 0;
-    virtual void *connect_companion() = 0;
+
+    enum Option {
+        // Option to strip or keep companion communication
+        FORCE_DENYLIST_UNMOUNT = 1
+    };
+
+    virtual void *JNIEnv() = 0;
+    virtual void *GetModuleInfo() = 0;
+    virtual void *ConnectCompanion() = 0;
+    virtual void HookJniNativeMethods(void *env, const char *className, void *methods, int numMethods) = 0;
+    virtual int HookDlopen(const char *name, void *callback) = 0;
+    virtual void *Aborter() = 0;
+    virtual void SetOption(Option opt) = 0;
 };
 
-class ModuleBase {
+class Module {
 public:
-    virtual ~ModuleBase() {}
-    virtual void onLoad(Api *api, JNIEnv *env) {}
-    virtual void preAppSpecialize(AppSpecializeArgs *args) {}
-    virtual void postAppSpecialize(AppSpecializeArgs *args) {}
-    virtual void preServerSpecialize(ServerSpecializeArgs *args) {}
-    virtual void postServerSpecialize(ServerSpecializeArgs *args) {}
+    virtual void OnLoad(Api *api, JNIEnv *env) {}
+    virtual void PreAppSpecialize(Api *api, void *specializeArgs) {}
+    virtual void PostAppSpecialize(Api *api, void *specializeArgs) {}
+    virtual void PreServerSpecialize(Api *api, void *specializeArgs) {}
+    virtual void PostServerSpecialize(Api *api, void *specializeArgs) {}
 };
 
 } // namespace zygisk
 
-#define ZYGISK_MODULE_ENTRY(module_class) \
-    static module_class __zygisk_module; \
-    extern "C" { \
-        ABI_EXPORT void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-            __zygisk_module.onLoad(api, env); \
-        } \
-        ABI_EXPORT void zygisk_companion_entry(int socket) {} \
+#define REGISTER_ZYGISK_MODULE(clazz) \
+    extern "C" __attribute__((visibility("default"))) void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+        static clazz module; \
+        module.OnLoad(api, env); \
     }
-
-#ifndef ABI_EXPORT
-#define ABI_EXPORT __attribute__((visibility("default")))
-#endif
-
-#endif // ZYGISK_HPP

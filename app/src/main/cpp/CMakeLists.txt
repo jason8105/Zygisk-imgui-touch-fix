@@ -1,24 +1,17 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(zygisk_imgui)
+project("zygisk_imgui")
 
 add_library(zygisk SHARED
-    zygisk_main.cpp
-    imgui/imgui.cpp
-    imgui/imgui_draw.cpp
-    imgui/imgui_tables.cpp
-    imgui/imgui_widgets.cpp
-    imgui/imgui_impl_opengl3.cpp
-    imgui/imgui_impl_android.cpp
+    zygisk_module.cpp
+    imgui_impl.cpp
 )
 
-target_include_directories(zygisk PRIVATE
-    imgui
-    include
-)
+find_library(log-lib log)
+find_library(android-lib android)
 
 target_link_libraries(zygisk
-    android
-    EGL
-    GLESv3
-    log
+    ${log-lib}
+    ${android-lib}
 )
+
+target_compile_definitions(zygisk PRIVATE ZYGISK_SDK=1)
