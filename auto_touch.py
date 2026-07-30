@@ -62,20 +62,20 @@ chosen_arg = sys.argv[1].lower() if len(sys.argv) > 1 else ""
 API_KEYS_POOL = {}
 if chosen_arg == "key_2":
     print("[*] CLI Argument Detected: Prioritizing GEMINI_KEY_2 as Primary")
-    API_KEYS_POOL[1] = env_key_2
-    API_KEYS_POOL[2] = env_key_1
+    API_KEYS_POOL["GEMINI_KEY_2"] = env_key_2
+    API_KEYS_POOL["GEMINI_KEY_1"] = env_key_1
 elif chosen_arg == "key_1":
     print("[*] CLI Argument Detected: Prioritizing GEMINI_KEY_1 as Primary")
-    API_KEYS_POOL[1] = env_key_1
-    API_KEYS_POOL[2] = env_key_2
+    API_KEYS_POOL["GEMINI_KEY_1"] = env_key_1
+    API_KEYS_POOL["GEMINI_KEY_2"] = env_key_2
 elif len(chosen_arg) > 10:  # Direct raw API key string passed from terminal
     print("[*] CLI Argument Detected: Using custom raw API key as Primary")
-    API_KEYS_POOL[1] = chosen_arg
-    API_KEYS_POOL[2] = env_key_1 if env_key_1 != chosen_arg else env_key_2
+    API_KEYS_POOL["CUSTOM_KEY"] = chosen_arg
+    API_KEYS_POOL["GEMINI_KEY_1"] = env_key_1 if env_key_1 != chosen_arg else env_key_2
 else:
     # Default fallback order: Key 1 first, Key 2 second
-    API_KEYS_POOL[1] = env_key_1
-    API_KEYS_POOL[2] = env_key_2
+    API_KEYS_POOL["GEMINI_KEY_1"] = env_key_1
+    API_KEYS_POOL["GEMINI_KEY_2"] = env_key_2
 
 def load_highest_token_models():
     """Automatically reads allmodelai.json and picks ALL text models sorted by highest inputTokenLimit"""
@@ -138,14 +138,14 @@ def run_cmd(cmd):
     return result.stdout + result.stderr
 
 def trigger_workflow_dispatch():
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/build.yml/dispatches"
+    url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/workflows/build.yml/dispatches"
     try:
         requests.post(url, headers=HEADERS, json={"ref": "main"}, timeout=10)
     except Exception:
         pass
 
 def get_latest_workflow_run():
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs?per_page=1"
+    url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs?per_page=1"
     try:
         res = requests.get(url, headers=HEADERS, timeout=15).json()
         runs = res.get("workflow_runs", [])
@@ -157,7 +157,7 @@ def get_latest_workflow_run():
 
 def check_artifact_size(run_id):
     """Checks the generated workflow artifacts to ensure the zip is not empty/broken (~746 bytes)."""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}/artifacts"
+    url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id) + "/artifacts"
     try:
         res = requests.get(url, headers=HEADERS, timeout=15).json()
         artifacts = res.get("artifacts", [])
@@ -179,7 +179,7 @@ def check_artifact_size(run_id):
 
 def get_workflow_logs(run_id, max_retries=5):
     print("[*] Fetching failed job details to get direct text logs...")
-    jobs_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}/jobs"
+    jobs_url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id) + "/jobs"
 
     for attempt in range(max_retries):
         try:
@@ -196,7 +196,7 @@ def get_workflow_logs(run_id, max_retries=5):
                 if job.get("conclusion") == "failure":
                     job_id = job["id"]
                     print(f"[*] Downloading text log for failed job: {job['name']}...")
-                    log_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/jobs/{job_id}/logs"
+                    log_url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/jobs/" + str(job_id) + "/logs"
 
                     log_res = requests.get(log_url, headers=HEADERS, allow_redirects=True, timeout=60)
                     if log_res.status_code == 200:
@@ -249,29 +249,28 @@ ERROR LOGS / STATUS CONTEXT:
         }]
     }
 
-    for key_id, active_key in API_KEYS_POOL.items():
+    for key_name, active_key in API_KEYS_POOL.items():
         if not active_key:
             continue
             
-        print(f"\n[*] Trying API Key ID: {key_id} (Key hint: ...{active_key[-4:]})")
-
+        print(f"\n[*] Trying API Key Source: {key_name} (Key hint: ...{active_key[-4:]})")
         
         for model_name in MODELS_POOL:
             url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={active_key}"
-            print(f"[*] Trying Model: {model_name} with API Key ID: {key_id}...")
+            print(f"[*] Trying Model: {model_name} with {key_name}...")
 
             try:
                 response = requests.post(url, json=payload, timeout=30)
                 res_json = response.json()
                 if "candidates" in res_json:
-                    print(f"[+] Success using Model: {model_name} on API Key ID: {key_id}")
+                    print(f"[+] Success using Model: {model_name} on {key_name}")
                     return res_json["candidates"][0]["content"]["parts"][0]["text"]
                 else:
                     error_msg = res_json.get('error', {}).get('message', 'Unknown Error')
-                    print(f"[!] Model {model_name} failed with Key {key_id}: {error_msg}")
+                    print(f"[!] Model {model_name} failed with {key_name}: {error_msg}")
                     time.sleep(1)
             except Exception as e:
-                print(f"[!] Network error for {model_name} with Key {key_id}: {str(e)}")
+                print(f"[!] Network error for {model_name} with {key_name}: {str(e)}")
                 time.sleep(1)
 
     return f"API Error / Limit Reached: All keys and JSON models failed completely."
@@ -369,7 +368,7 @@ def master_loop():
                 else:
                     print(f"[*] Build is {status}... waiting for it to finish...")
 
-            url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}"
+            url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id)
 
             try:
                 run_details = requests.get(url, headers=HEADERS, timeout=15).json()
