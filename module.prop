@@ -1,7 +1,8 @@
-id=zygisk_touch_fix
-name=Universal ImGui Touch Fix
-version=v1.0
-versionCode=1
-author=BuildEngineer
-description=Universal touch interception for Magisk v24-26.
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Universal Touch Fix
+version=v1.0.0
+versionCode=100
+author=Elite Engineer
+description=Universal ImGui Menu with advanced touch interception for Unity, Unreal, and native Android game engines (Magisk 24-26 Zygisk).
 minMagisk=24000
+minMagiskVersion=24000
