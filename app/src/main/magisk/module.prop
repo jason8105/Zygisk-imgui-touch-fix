@@ -1,7 +1,7 @@
-id=zygisk_imgui_touch_fix
-name=Zygisk ImGui Universal Touch Fix
+id=zygisk_imgui_universal
+name=Zygisk ImGui Universal Touch-Fixed Menu
 version=v1.0
-versionCode=1
-author=Developer
-description=Universal ImGui Menu with robust AInputQueue touch hook for all game engines, supporting Magisk v24-26 Zygisk.
+versionCode=100
+author=Elite Engineer
+description=Universal ImGui Overlay with robust AInputQueue touch interception supporting Unity, Unreal, and native C++ engines.
 minMagisk=24000
