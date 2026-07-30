@@ -1,4 +1,49 @@
 plugins {
-    id 'com.android.application' version '8.2.0' apply false
-    id 'com.android.library' version '8.2.0' apply false
+    id 'com.android.library'
+}
+
+android {
+    compileSdk 33
+    ndkVersion "25.1.8937393"
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 33
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -fvisibility=hidden"
+                arguments "-DANDROID_STL=c++_static"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "jni/CMakeLists.txt"
+        }
+    }
+}
+
+task zipModule(type: Zip) {
+    from('module.prop')
+    from('customize.sh')
+    
+    // Package 64-bit lib
+    into('zygisk') {
+        from("${buildDir}/intermediates/cmake/debug/obj/arm64-v8a/libzygisk_imgui.so")
+        rename 'libzygisk_imgui.so', 'arm64-v8a.so'
+    }
+    
+    // Package 32-bit lib
+    into('zygisk') {
+        from("${buildDir}/intermediates/cmake/debug/obj/armeabi-v7a/libzygisk_imgui.so")
+        rename 'libzygisk_imgui.so', 'armeabi-v7a.so'
+    }
+
+    archiveFileName = "Zygisk-ImGui-Universal.zip"
+    destinationDirectory = file("$buildDir/outputs/magisk")
+}
+
+afterEvaluate {
+    zipModule.dependsOn assembleDebug
 }
