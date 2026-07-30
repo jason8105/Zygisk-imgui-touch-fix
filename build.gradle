@@ -1,17 +1,15 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.0'
-    }
+// Root gradle to ensure task ordering
+task copyLibs(type: Copy) {
+    from 'app/build/intermediates/cmake/release/obj'
+    into 'magisk_module/zygisk'
+    include '**/*.so'
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
+task packageModule(type: Zip) {
+    archiveFileName = "UniversalTouchFix.zip"
+    destinationDirectory = file('build/outputs')
+    from 'magisk_module'
+    from ('app/build/intermediates/cmake/release/obj') {
+        into 'zygisk'
     }
 }

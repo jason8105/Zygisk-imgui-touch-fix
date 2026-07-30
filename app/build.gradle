@@ -1,20 +1,22 @@
-android {
-    // ...
-    packagingOptions {
-        jniLibs {
-            useLegacyPackaging = true
-        }
-    }
+plugins {
+    id 'com.android.library'
 }
 
-task zipModule(type: Zip) {
-    archiveFileName = "UniversalTouchFix.zip"
-    destinationDirectory = file("$buildDir/outputs/magisk")
-    from("module_assets") {
-        include "module.prop", "customize.sh"
+android {
+    compileSdk 33
+    defaultConfig {
+        minSdk 24
+        targetSdk 33
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -fno-rtti -fno-exceptions"
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
     }
-    from("$buildDir/intermediates/cmake/release/obj") {
-        into "zygisk"
-        include "**/*.so"
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
     }
 }
