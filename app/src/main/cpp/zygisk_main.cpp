@@ -1,43 +1,28 @@
 #include <jni.h>
 #include <android/log.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <dlfcn.h>
 #include "zygisk.hpp"
-#include "imgui_integration.h"
 
-using zygisk::Api;
-using zygisk::AppSpecArgs;
-using zygisk::ServerSpecArgs;
+#define LOG_TAG "ZygiskImGui"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-class ZygiskModule : public zygisk::ModuleBase {
+void initImGuiHooks();
+
+class MyModule : public zygisk::ZygiskModule {
 public:
-    void onLoad(Api* api, JNIEnv* env) override {
-        this->api = api;
-        this->env = env;
-        LOGD("ZygiskModule onLoad loaded into process");
+    void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+        // Not used
     }
 
-    void preAppSpecialize(AppSpecArgs* args) override {
-        // Optional pre-specialize hooks
+    void postAppSpecialize(const zygisk::AppSpecializeArgs *args) override {
+        LOGD("postAppSpecialize triggered, initializing ImGui and universal touch hooks...");
+        initImGuiHooks();
     }
-
-    void postAppSpecialize(AppSpecArgs* args) override {
-        LOGD("ZygiskModule postAppSpecialize executed");
-        // Initialize hooks or display integration here
-        // For demonstration, hook EGL swap buffers or input dispatch if desired
-    }
-
-private:
-    Api* api;
-    JNIEnv* env;
 };
 
-// Register Zygisk module entry point compatible with Magisk v24-26
-ZYGISK_MODULE_ENTRY(ZygiskModule)
+static zygisk::ZygiskApi *g_api = nullptr;
 
-// Optional hook interceptor for universal touch dispatch via AInputQueue or native APIs
-extern "C" __attribute__((visibility("default")))
-bool NativeHandleInput(AInputEvent* event) {
-    return ImGuiIntegration::HandleInput(event);
+extern "C" __attribute__((visibility("default"))) __attribute__((used))
+void zygisk_module_entry(zygisk::ZygiskApi *api, int version) {
+    g_api = api;
+    static MyModule module;
 }
