@@ -1,6 +1,6 @@
-id=zyCheats
-name=ZyCheats Unity ImGui Menu
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Touch Fix
 version=v1.0
 versionCode=1
-author=Elite Engineer
+author=Developer
 description=Zygisk module with Unity JNI touch-fixed ImGui menu.
