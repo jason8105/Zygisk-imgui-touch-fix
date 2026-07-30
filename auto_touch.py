@@ -138,6 +138,9 @@ CRITICAL REQUIREMENTS:
 2. BUILD HEALING: Analyze the GitHub Actions workflow build failure error logs below. Fix ANY compilation, linking, CMake, Android.mk, or Gradle errors.
 3. MAGISK PACKAGING: Ensure the build system correctly packages the compiled .so files alongside module.prop and customize.sh into a standard Magisk module zip format. Fix any zip packaging errors.
 
+You MUST provide a short, descriptive git commit message summarizing your fix using this exact format:
+=== COMMIT: [Your descriptive commit message here] ===
+
 You MUST output the exact file modifications or deletions using these exact block formats:
 
 To modify or create a file:
@@ -192,6 +195,9 @@ def apply_ai_patches(ai_response):
             with open("ai_fix_suggestion.txt", "r", encoding="utf-8") as f:
                 ai_response = f.read()
 
+    commit_match = re.search(r"=== COMMIT:\s*(.*?)\s*===", ai_response)
+    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve build or touch implementation issue via AI"
+
     pattern_file = r"=== FILE:\s*(.*?)===\s*\n(.*?)\s*=== END FILE ==="
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
     for file_path, content in matches_file:
@@ -214,9 +220,9 @@ def apply_ai_patches(ai_response):
     if not changes_made:
         with open("ai_fix_suggestion.txt", "w", encoding="utf-8") as f:
             f.write(ai_response)
-        return []
+        return [], commit_message
 
-    return changes_made
+    return changes_made, commit_message
 
 def master_loop():
     print("==================================================")
@@ -281,12 +287,14 @@ def master_loop():
                 ai_fix = ask_gemini_http(logs)
 
                 print("[*] Automatically applying AI patches to local files...")
-                applied_changes = apply_ai_patches(ai_fix)
+                applied_changes, commit_message = apply_ai_patches(ai_fix)
 
                 if applied_changes:
                     print(f"[+] CHANGES APPLIED: {', '.join(applied_changes)}")
+                    print(f"[+] AI COMMIT MESSAGE: {commit_message}")
                     run_cmd("git add .")
-                    run_cmd('git commit -m "Auto-fix applied by AI Zygisk Master Builder"')
+                    safe_msg = commit_message.replace('"', '\\"')
+                    run_cmd(f'git commit -m "{safe_msg}"')
                     run_cmd("git push origin main --force")
                     print("[+] Pushed code updates to GitHub!")
 

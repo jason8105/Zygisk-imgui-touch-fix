@@ -27,10 +27,10 @@ jobs:
         with:
           cmake-version: '3.18.1'
 
-      - name: Build Mod Menu
+      - name: Build Mod Menu (Debug)
         run: |
           chmod +x ./gradlew
-          ./gradlew :module:assembleRelease
+          ./gradlew :module:assembleDebug
 
       - name: Create Proper Magisk Structure
         run: |
@@ -41,11 +41,10 @@ jobs:
           cd ../temp_extracted
           
           # Zip up the contents directly so module.prop is at the root
-          zip -r ../final_package/Subway-ImGui-Installable.zip .
+          zip -r ../final_package/Subway-ImGui-Debug-Installable.zip .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Subway-ImGui-Installable
+          name: Subway-ImGui-Debug-Installable
           path: final_package/*.zip
-          
