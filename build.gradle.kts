@@ -3,17 +3,17 @@ plugins {
 }
 
 android {
-    namespace = "com.zygisk.imguitouchfix"
+    namespace = "com.zygisk.imgui"
     compileSdk = 34
 
     defaultConfig {
-        minSdk = 24
+        minSdk = 26
         targetSdk = 34
 
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
-                arguments += "-DANDROID_STL=c++_shared"
+                arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }
     }
@@ -30,39 +30,32 @@ android {
             isMinifyEnabled = false
         }
     }
-    
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
 }
 
-val prepareMagiskFiles by tasks.registering(Copy::class) {
+val createMagiskModuleZip by tasks.registering(Zip::class) {
     dependsOn("assembleRelease")
+    archiveFileName.set("zygisk-imgui-release.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("outputs/magisk"))
+
+    val cmakeOutputDir = layout.buildDirectory.dir("intermediates/cmake/release/obj")
     
-    val abiList = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-    for (abi in abiList) {
-        from(layout.buildDirectory.dir("intermediates/cmake/release/obj/$abi/libzygisk.so"))
-        into(layout.buildDirectory.dir("magisk_module/zygisk/$abi"))
+    // Explicitly declare inputs and outputs to prevent Gradle validation task errors
+    val abis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    for (abi in abis) {
+        val soFile = cmakeOutputDir.map { it.dir("$abi/libzygisk.so").asFile }
+        inputs.file(soFile).optional()
+        from(soFile) {
+            into("zygisk/$abi")
+        }
     }
-    
-    doFirst {
-        layout.buildDirectory.dir("magisk_module/zygisk").get().asFile.mkdirs()
+
+    from("module.prop")
+    from("customize.sh") {
+        into("")
+        optional()
     }
 }
 
-tasks.register<Zip>("buildMagiskZip") {
-    dependsOn(prepareMagiskFiles)
-    
-    // Explicitly declare inputs safely or avoid strict validation failures
-    val outputDir = layout.buildDirectory.dir("magisk_module")
-    inputs.dir(outputDir)
-
-    from(outputDir)
-    from("src/main/magisk") {
-        include("module.prop", "post-fs-data.sh", "service.sh", "action.sh")
-    }
-    
-    archiveFileName.set("Zygisk-ImGui-Touch-Fix.zip")
-    destinationDirectory.set(layout.buildDirectory.dir("outputs/magisk"))
+tasks.named("assemble") {
+    finalizedBy(createMagiskModuleZip)
 }
