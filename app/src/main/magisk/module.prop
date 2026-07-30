@@ -1,0 +1,6 @@
+id=zygisk_imguitouchfix
+name=Zygisk ImGui Touch Fix (Unity JNI)
+version=1.0
+versionCode=1
+author=Elite Engineer
+description=Zygisk module featuring a robust Unity_nativeInjectEvent Dobby hook for ImGui touch interception and consumption.
