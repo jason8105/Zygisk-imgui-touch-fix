@@ -1,7 +1,7 @@
-id=zygisk_imgui_module
-name=Zygisk ImGui Universal Menu
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Universal Touch Fix
 version=v1.0
 versionCode=1
 author=Developer
-description=Universal ImGui Menu with Zygisk hook and touch input fix for Magisk 24-26.
+description=Universal ImGui menu with robust touch interception supporting Unity, Unreal, and native C++ games for Magisk 24-26.
 minMagisk=24000

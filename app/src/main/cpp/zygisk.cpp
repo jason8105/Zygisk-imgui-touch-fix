@@ -4,35 +4,37 @@
 #include "zygisk.hpp"
 #include "imgui.h"
 
-#define LOG_TAG "ZygiskModule"
+#define LOG_TAG "ZygiskImGui"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-void init_input_hooks();
+void InitializeInputHooks();
 
-class ImGuiZygiskModule : public zygisk::ModuleBase {
+class ZygiskModule : public zygisk::ModuleBase {
 public:
-    void onLoad(zygisk::Api* api, JNIEnv* env) override {
+    void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
     }
 
-    void preAppSpecialize(zygisk::AppSpecializeArgs* args) override {
-        // Prepare environment prior to app specialization
+    void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+        // Disable or inject before app specialization if required
     }
 
-    void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
-        LOGD("Zygisk module loaded into target application process.");
+    void postAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+        LOGD("ZygiskImGui loaded into target process.");
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         ImGui::StyleColorsDark();
 
-        init_input_hooks();
+        InitializeInputHooks();
     }
 
 private:
-    zygisk::Api* api = nullptr;
-    JNIEnv* env = nullptr;
+    zygisk::Api *api = nullptr;
+    JNIEnv *env = nullptr;
 };
 
-REGISTER_ZYGISK_MODULE(ImGuiZygiskModule)
+static zygisk::Api *g_api = nullptr;
+
+REGISTER_ZYGISK_MODULE(ZygiskModule)

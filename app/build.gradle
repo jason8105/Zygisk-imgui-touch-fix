@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'com.zygisk.imgui'
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.zygisk.imgui"
-        minSdk 24
-        targetSdk 33
+        minSdk 26
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
@@ -35,38 +35,35 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
+    ndkVersion '25.1.8937393'
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
 }
 
 task buildMagiskModule(type: Zip) {
     dependsOn 'assembleRelease'
-    archiveFileName = 'zygisk-imgui-release.zip'
+    archiveFileName = 'zygisk-imgui-touch-fix.zip'
     destinationDirectory = file("$buildDir/outputs/magisk")
 
-    from("$rootDir/magisk_module") {
+    // Base Magisk module structure
+    from("$projectDir/src/main/magisk") {
         include 'module.prop'
         include 'post-fs-data.sh'
         include 'service.sh'
+        include 'action.sh'
     }
 
-    // Pack compiled native libraries into correct Zygisk structure
-    into('zygisk') {
-        from("$buildDir/intermediates/cmake/release/obj") {
-            include 'armeabi-v7a/libzygisk.so'
-            include 'arm64-v8a/libzygisk.so'
-            include 'x86/libzygisk.so'
-            include 'x86_64/libzygisk.so'
-        }
+    // Include compiled native libraries into zygisk directory structure
+    from("$buildDir/intermediates/cmake/release/obj") {
+        into 'zygisk'
+        include '**/libzygisk.so'
     }
 }
 
-tasks.named('build') {
-    finalizedBy('buildMagiskModule')
+tasks.whenTaskAdded { task ->
+    if (task.name == 'bundleRelease' || task.name == 'assembleRelease') {
+        task.finalizedBy 'buildMagiskModule'
+    }
 }
