@@ -1,66 +1,57 @@
-#ifndef ZYGISK_HPP
-#define ZYGISK_HPP
+#pragma once
 
-#include <jni.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 namespace zygisk {
 
-enum ApiVersion {
-    API_VERSION_1 = 1,
-    API_VERSION_2 = 2,
-    API_VERSION_3 = 3,
-    API_VERSION_4 = 4,
-    API_VERSION_5 = 5,
-    API_VERSION_CURRENT = 5
+enum ApiVersion : uint32_t {
+    V1 = 1,
 };
 
-struct AppSpecializeArgs {
-    jint uid;
-    jint gid;
-    jobjectArray gids;
-    jint runtimeFlags;
-    jobjectArray rlimit;
-    jint mountExternal;
-    jstring seInfo;
-    jstring niceName;
-    jstring instructionSet;
-    jstring appDataDir;
-};
-
-struct ServerSpecializeArgs {
-    jint uid;
-    jint gid;
-    jobjectArray gids;
-    jint runtimeFlags;
-    jobjectArray rlimit;
-    jstring seInfo;
-    jstring name;
+enum Option : uint32_t {
+    OPTION_DLCLOSE_MODULE_LIBRARY = 0,
 };
 
 class Api {
 public:
-    virtual void registerModule(void* module) = 0;
-    virtual int diockServer(int req) = 0;
-    virtual void setOption(int option) = 0;
-    virtual int connectCompanion() = 0;
+    virtual void *jniGetEnv() = 0;
+    virtual int option(Option opt) = 0;
+    virtual void *module_load(const char *name, int flags) = 0;
+    virtual void *plt_hook_register(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
+    virtual bool plt_hook_commit() = 0;
+    virtual int hook_jni_native_methods(const char *className, void *methods, int numMethods) = 0;
+};
+
+class ServerConnection {
+public:
+    virtual int connect() = 0;
+    virtual void disconnect() = 0;
+    virtual ssize_t send(const void *data, size_t length) = 0;
+    virtual ssize_t recv(void *data, size_t length) = 0;
+    virtual int send_fds(const int *fds, size_t length) = 0;
+    virtual int recv_fds(int *fds, size_t length) = 0;
 };
 
 class ModuleBase {
 public:
-    virtual ~ModuleBase() {}
-    virtual void onLoad(Api* api, JNIEnv* env) {}
-    virtual void preAppSpecialize(AppSpecializeArgs* args) {}
-    virtual void postAppSpecialize(const AppSpecializeArgs* args) {}
-    virtual void preServerSpecialize(ServerSpecializeArgs* args) {}
-    virtual void postServerSpecialize(const ServerSpecializeArgs* args) {}
-};
-
-struct ModuleABI {
-    int apiVersion;
-    void (*companion)(int);
-    void (*moduleEntry)(Api*, JNIEnv*);
+    virtual void onPreAppSpecialize(Api *api, ServerConnection *connection) {}
+    virtual void onPostAppSpecialize(Api *api, ServerConnection *connection) {}
+    virtual void onPreServerSpecialize(Api *api, ServerConnection *connection) {}
+    virtual void onPostServerSpecialize(Api *api, ServerConnection *connection) {}
 };
 
 } // namespace zygisk
 
-#endif // ZYGISK_HPP
+#define REGISTER_ZYGISK_MODULE(clazz) \
+    static clazz __zygisk_module_instance; \
+    extern "C" __attribute__((visibility("default"))) void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+        /* compatibility bridge */ \
+    } \
+    extern "C" __attribute__((visibility("default"))) void zygisk_init(zygisk::Api *api, JNIEnv *env) { \
+        __zygisk_module_instance.init(api, env); \
+    }
+
+#define ZYGISK_MODULE_WITH_ENV(clazz) \
+    class clazz : public zygisk::ModuleBase
