@@ -1,14 +1,73 @@
-// Top-level build file
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
+plugins {
+    id 'com.android.library' version '8.1.1'
+}
+
+android {
+    namespace 'com.zygisk.imguitouch'
+    compileSdk 33
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 33
+        versionCode 100
+        versionName "1.0.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -frtti -fexceptions"
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
     }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+    
+    lint {
+        abortOnError false
     }
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+task createMagiskModule(type: Zip) {
+    dependsOn 'assembleRelease'
+    archiveFileName = 'zygisk-imgui-touch-fix.zip'
+    destinationDirectory = file("$buildDir/outputs/magisk")
+
+    // Ensure output directories exist before packaging
+    doFirst {
+        file("$buildDir/outputs/magisk").mkdirs()
+    }
+
+    // Include module configuration files
+    from("$projectDir") {
+        include 'module.prop'
+        include 'post-fs-data.sh'
+        include 'service.sh'
+        include 'uninstall.sh'
+    }
+
+    // Map compiled native libraries into Zygisk directory structure for all ABIs
+    def abiList = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
+    abiList.each { abi ->
+        def soFile = file("$buildDir/intermediates/cmake/release/obj/${abi}/libzygisk.so")
+        if (soFile.exists()) {
+            from(soFile) {
+                into("zygisk/${abi}")
+            }
+        }
+    }
+}
+
+tasks.named('assembleRelease').configure {
+    finalizedBy('createMagiskModule')
 }
