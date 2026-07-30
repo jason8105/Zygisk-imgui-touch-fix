@@ -1,0 +1,7 @@
+id=zygisk_imgui_universal
+name=Universal Zygisk ImGui
+version=v1.0
+versionCode=1
+author=Elite Engineer
+description=Universal ImGui Menu with Fixed Touch for Zygisk (Magisk 24-26).
+minMagisk=24000

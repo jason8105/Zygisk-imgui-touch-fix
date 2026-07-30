@@ -1,15 +1,13 @@
-// Root gradle to ensure task ordering
-task copyLibs(type: Copy) {
-    from 'app/build/intermediates/cmake/release/obj'
-    into 'magisk_module/zygisk'
-    include '**/*.so'
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.2'
+    }
 }
 
-task packageModule(type: Zip) {
-    archiveFileName = "UniversalTouchFix.zip"
-    destinationDirectory = file('build/outputs')
-    from 'magisk_module'
-    from ('app/build/intermediates/cmake/release/obj') {
-        into 'zygisk'
-    }
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }

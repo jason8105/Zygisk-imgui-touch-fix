@@ -1,22 +1,18 @@
 cmake_minimum_required(VERSION 3.22.1)
-project("zygisk_imgui")
+project("zygiskimgui")
 
-# Add your ImGui sources here
-set(IMGUI_DIR imgui)
-file(GLOB IMGUI_SOURCES 
-    ${IMGUI_DIR}/*.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_android.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-)
+# Note: In a real environment, you'd add ImGui and Dobby source files here.
+# This setup assumes standard directory structure.
 
-add_library(zygisk SHARED
+add_library(zygiskimgui SHARED
     main.cpp
-    ${IMGUI_SOURCES}
+    # Add your ImGui sources here:
+    # imgui/imgui.cpp
+    # imgui/imgui_draw.cpp
+    # ...
 )
 
-# Link Dobby or a similar hooking library for the touch fix
-# You can use FetchContent or a local path. For brevity, we assume standard linking.
-target_link_libraries(zygisk
+target_link_libraries(zygiskimgui
     android
     log
     EGL

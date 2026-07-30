@@ -3,20 +3,57 @@ plugins {
 }
 
 android {
-    compileSdk 33
+    namespace 'com.example.zygiskimgui'
+    compileSdk 34
+
     defaultConfig {
         minSdk 24
-        targetSdk 33
+        targetSdk 34
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fno-rtti -fno-exceptions"
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
                 arguments "-DANDROID_STL=c++_shared"
+                abiFilters "arm64-v8a", "armeabi-v7a"
             }
         }
     }
+
     externalNativeBuild {
         cmake {
-            path "src/main/cpp/CMakeLists.txt"
+            path "src/main/jni/CMakeLists.txt"
+        }
+    }
+
+    packagingOptions {
+        doNotStrip "**/*.so"
+    }
+}
+
+android.libraryVariants.all { variant ->
+    def variantName = variant.name.capitalize()
+    def zipTask = tasks.register("packageMagiskModule${variantName}", Zip) {
+        archiveFileName = "Zygisk-ImGui-Universal-${variant.name}.zip"
+        destinationDirectory = file("$buildDir/outputs/magisk")
+
+        from("${projectDir}/src/main/zip_static") {
+            include "**/*"
+        }
+
+        from("${projectDir}/src/main/jni/module.prop") {
+            into ""
+        }
+
+        variant.externalNativeBuildTasks.each { nativeTask ->
+            dependsOn nativeTask
+        }
+
+        def abiList = ["arm64-v8a", "armeabi-v7a"]
+        abiList.each { abi ->
+            from("${buildDir}/intermediates/cmake/${variant.name}/obj/${abi}") {
+                include "*.so"
+                into "zygisk/${abi}"
+                rename "libzygiskimgui.so", "libzygisk.so"
+            }
         }
     }
 }
