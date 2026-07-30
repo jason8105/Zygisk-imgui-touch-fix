@@ -1,19 +1,23 @@
-#include <imgui.h>
+#include <jni.h>
 #include <android/input.h>
+#include "imgui.h"
+#include "zygisk.hpp"
 
-// Universal Hook: Intercepts raw Android MotionEvents
-bool HandleInput(AInputEvent* event) {
+// Universal Input Hook
+static int (*orig_AInputQueue_preDispatchEvent)(AInputQueue* queue, AInputEvent* event);
+
+int hook_AInputQueue_preDispatchEvent(AInputQueue* queue, AInputEvent* event) {
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
-        int action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
         float x = AMotionEvent_getX(event, 0);
         float y = AMotionEvent_getY(event, 0);
-        
+        int32_t action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+
         ImGuiIO& io = ImGui::GetIO();
         io.AddMousePosEvent(x, y);
-        io.AddMouseButtonEvent(0, (action != AMOTION_EVENT_ACTION_UP));
+        io.AddMouseButtonEvent(0, action != AMOTION_EVENT_ACTION_UP);
 
-        // Consume touch if ImGui is capturing
-        return io.WantCaptureMouse;
+        // If ImGui wants to capture, consume the event
+        if (io.WantCaptureMouse) return 1;
     }
-    return false;
+    return orig_AInputQueue_preDispatchEvent(queue, event);
 }
