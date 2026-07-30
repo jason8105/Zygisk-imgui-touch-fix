@@ -48,7 +48,7 @@ MODELS_POOL = load_highest_token_models()
 # MANUAL REPOSITORY SELECTION
 # ==========================================
 print("\n==================================================")
-print(" Full-Auto Zygisk Builder & Touch Fixer")
+print(" Full-Auto Universal Zygisk Builder & Touch Fixer")
 print("==================================================")
 _owner = input("Enter GitHub Username/Owner (Press Enter for 'jason8105'): ").strip()
 REPO_OWNER = _owner if _owner else "jason8105"
@@ -131,10 +131,10 @@ def get_workflow_logs(run_id, max_retries=5):
 def ask_gemini_http(error_logs):
     prompt = f"""
 You are an elite Android NDK, C++, Gradle, and Zygisk module build engineer.
-Your mission is to ensure this repository compiles into a fully functional, flashable Magisk Zygisk module zip that contains a Unity JNI touch-fixed ImGui menu.
+Your mission is to ensure this repository compiles into a fully functional, flashable Magisk Zygisk module zip that contains a UNIVERSAL touch-fixed ImGui menu (supporting all game engines like Unity, Unreal, and native C++).
 
 CRITICAL REQUIREMENTS:
-1. TOUCH FIX: You must completely remove any standard native input hooks (like AInputQueue, InputConsumer). Implement a Dobby JNI hook targeting 'Unity_nativeInjectEvent' via 'libunity.so'. Extract X/Y coordinates from the Java MotionEvent, pass them to ImGui::GetIO().AddMousePosEvent(), and consume the touch if ImGui wants capture.
+1. UNIVERSAL TOUCH FIX: Implement a robust, universal input hook (such as standard Android AInputQueue, InputConsumer, or native event dispatches) that works across all game engines. Extract touch X/Y coordinates, pass them to ImGui::GetIO().AddMousePosEvent(), and consume the touch if ImGui wants mouse capture. Do not restrict it to a single engine like Unity.
 2. BUILD HEALING: Analyze the GitHub Actions workflow build failure error logs below. Fix ANY compilation, linking, CMake, Android.mk, or Gradle errors.
 3. MAGISK PACKAGING: Ensure the build system correctly packages the compiled .so files alongside module.prop and customize.sh into a standard Magisk module zip format. Fix any zip packaging errors.
 
@@ -196,7 +196,7 @@ def apply_ai_patches(ai_response):
                 ai_response = f.read()
 
     commit_match = re.search(r"=== COMMIT:\s*(.*?)\s*===", ai_response)
-    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve build or touch implementation issue via AI"
+    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve universal touch and build configuration issues"
 
     pattern_file = r"=== FILE:\s*(.*?)===\s*\n(.*?)\s*=== END FILE ==="
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
@@ -226,7 +226,7 @@ def apply_ai_patches(ai_response):
 
 def master_loop():
     print("==================================================")
-    print(" Starting Full-Auto Zygisk Builder & Touch Fixer")
+    print(" Starting Full-Auto Universal Zygisk Builder & Touch Fixer")
     print("==================================================")
 
     last_processed_run_id = None
@@ -267,7 +267,7 @@ def master_loop():
 
             if conclusion == "success":
                 print("\n==================================================")
-                print(" SUCCESS! Zygisk Module Zip & Touch Fix compiled cleanly!")
+                print(" SUCCESS! Universal Zygisk Module Zip compiled cleanly!")
                 print("==================================================")
                 last_processed_run_id = run_id
                 print("[*] Waiting for new builds...\n")

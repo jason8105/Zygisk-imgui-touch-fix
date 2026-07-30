@@ -1,0 +1,18 @@
+android {
+    // Ensure CMake points to the correct build output
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+}
+
+// Ensure Magisk zip is packaged correctly post-build
+task buildMagiskZip(type: Zip) {
+    from('src/main/magisk')
+    from('build/intermediates/cmake/release/obj') {
+        into 'lib/arm64-v8a'
+    }
+    archiveFileName = "Zygisk-ImGui-Module.zip"
+    destinationDirectory = file("${buildDir}/outputs")
+}
