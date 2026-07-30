@@ -1,60 +1,38 @@
-#ifndef ZYGISK_HPP
-#define ZYGISK_HPP
-
+#pragma once
 #include <jni.h>
-#include <sys/types.h>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace zygisk {
-
-struct AppSpecializeArgs {
-    jint *uid;
-    jint *gid;
-    jobjectArray *gids;
-    jint *runtime_flags;
-    jobjectArray *zygisk_abi_list;
-    jstring *instruction_set;
-    jstring *app_data_dir;
-};
-
-struct ServerSpecializeArgs {
-    jint *uid;
-    jint *gid;
-    jobjectArray *gids;
-    jint *runtime_flags;
-    jlong *permitted_capabilities;
-    jlong *effective_capabilities;
-};
 
 class Api {
 public:
     enum Option {
-        FEATURE_DLCLOSE_MODS = 0,
-        FORCE_DENYLIST_UNMOUNT = 1
+        OPTION_DLCLOSE_MODULE_LIBRARY = 0
     };
-    virtual void setOption(Option opt) = 0;
-    virtual int hook_plt(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
-    virtual void *plt_safe_hook_symbol(const char *lib_name, const char *symbol, void *new_func) = 0;
-    virtual void inner_dlclose(void *handle) = 0;
+    virtual void *dlopen_api(const char *filename, int flag) = 0;
+    virtual void *dlsym_api(const char *symbol) = 0;
+    virtual void plt_hook_register(const char *lib_name, const char *symbol, void *fn, void **old_out) = 0;
+    virtual bool plt_hook_commit() = 0;
+    virtual void set_option(Option opt) = 0;
+    virtual int get_module_version() = 0;
+    virtual void *get_zj_iva() = 0;
 };
 
-class ModuleBase {
+class Module {
 public:
-    virtual ~ModuleBase() {}
-    virtual void onLoad(Api *api, JNIEnv *env) {}
-    virtual void preAppSpecialize(AppSpecializeArgs *args) {}
-    virtual void postAppSpecialize(AppSpecializeArgs *args) {}
-    virtual void preServerSpecialize(ServerSpecializeArgs *args) {}
-    virtual void postServerSpecialize(ServerSpecializeArgs *args) {}
+    virtual void on_load(Api *api, JNIEnv *env) {}
+    virtual void pre_app_specialize(void *args) {}
+    virtual void post_app_specialize(void *args) {}
+    virtual void pre_server_specialize(void *args) {}
+    virtual void post_server_specialize(void *args) {}
+    virtual ~Module() {}
 };
 
 } // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-    static clazz __zygisk_module; \
     extern "C" __attribute__((visibility("default"))) void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-        __zygisk_module.onLoad(api, env); \
-    } \
-    extern "C" __attribute__((visibility("default"))) void zygisk_companion_entry(int client) { \
+        static clazz module; \
+        module.on_load(api, env); \
     }
-
-#endif // ZYGISK_HPP

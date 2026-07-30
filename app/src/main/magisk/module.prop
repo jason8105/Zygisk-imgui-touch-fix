@@ -3,5 +3,5 @@ name=Zygisk ImGui Universal Menu
 version=v1.0
 versionCode=1
 author=Developer
-description=Universal Zygisk ImGui Menu with cross-engine touch fix for Magisk v24-26.
+description=Universal ImGui Menu with Zygisk hook and touch input fix for Magisk 24-26.
 minMagisk=24000

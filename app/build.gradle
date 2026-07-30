@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'com.zygisk.imgui'
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.zygisk.imgui"
         minSdk 24
-        targetSdk 33
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
@@ -35,25 +35,23 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
+    ndkVersion '25.1.8937393'
 }
 
-task buildMagiskModule(type: Zip) {
-    dependsOn 'assembleRelease'
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+}
 
-    archiveFileName = "ZygiskImguiModule.zip"
+task createMagiskModule(type: Zip) {
+    dependsOn 'assembleRelease'
+    archiveFileName = "ZygiskImguiModule-Magisk.zip"
     destinationDirectory = file("$buildDir/outputs/magisk")
 
     from("$projectDir/src/main/magisk") {
         include 'module.prop'
         include 'customize.sh'
-        include 'post-fs-data.sh'
     }
 
-    // Pack compiled native libraries into correct Zygisk structure
     into("zygisk") {
         from("$buildDir/intermediates/cmake/release/obj") {
             include "**/libzygisk.so"
@@ -62,5 +60,5 @@ task buildMagiskModule(type: Zip) {
 }
 
 tasks.named('assembleRelease').configure {
-    finalizedBy('buildMagiskModule')
+    finalizedBy('createMagiskModule')
 }
