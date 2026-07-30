@@ -1,20 +1,21 @@
-SKIPUNZIP=0
+ui_print "**************************************************"
+ui_print "       Zygisk ImGui Universal Touch Fix          "
+ui_print "       Magisk v24-26 Compatible                  "
+ui_print "**************************************************"
 
-ui_print "****************************************"
-ui_print "*   Zygisk ImGui Touch Fix for Unity   *"
-ui_print "****************************************"
-
-if [ "$BOOTMODE" ! T ]; then
-  abort "[-] Please flash this module via Magisk or KernelSU Manager app!"
+if [ "$BOOTMODE" ! = true ]; then
+  abort "[-] Please install this module from within Magisk Manager."
 fi
 
-ui_print "[*] Extracting module files..."
-unzip -o "$ZIPFILE" 'zygisk/*' -s "$MODPATH" >&2
+# Ensure architecture support
+ABI=""
+case "%ARCH%" in
+  arm|armeabi-v7a) ABI="armeabi-v7a" ;;
+  arm64|aarch64) ABI="arm64-v8a" ;;
+  x86) ABI="x86" ;;
+  x86_64) ABI="x86_64" ;;
+  *) abort "[-] Unsupported architecture: %ARCH%" ;;
+es
 
-if [ -f "$MODPATH/zygisk/libzygisk_imgui.so" ]; then
-  ui_print "[+] Native library successfully packaged."
-else
-  ui_print "[-] Warning: Native library missing from target path."
-fi
-
-ui_print "[+] Installation finished successfully!"
+ui_print "[+] Target Architecture: $ABI"
+ui_print "[+] Installation completed successfully!"

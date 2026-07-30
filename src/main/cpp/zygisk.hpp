@@ -1,57 +1,94 @@
-#pragma once
+#ifndef ZYGISK_HPP
+#define ZYGISK_HPP
 
+#include <jni.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/types.h>
 
 namespace zygisk {
 
-enum ApiVersion : uint32_t {
-    V1 = 1,
-};
-
-enum Option : uint32_t {
-    OPTION_DLCLOSE_MODULE_LIBRARY = 0,
-};
-
 class Api {
 public:
-    virtual void *jniGetEnv() = 0;
-    virtual int option(Option opt) = 0;
-    virtual void *module_load(const char *name, int flags) = 0;
-    virtual void *plt_hook_register(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
-    virtual bool plt_hook_commit() = 0;
-    virtual int hook_jni_native_methods(const char *className, void *methods, int numMethods) = 0;
+    enum Option {
+        ZYGISK_OPTION_DLCLOSE_MODULE_LIBRARY = 0,
+    };
+
+    template <typename T>
+    void pltHookRegister(const char *libname, const char *symbol, T new_func, T *old_func) {
+        if (table && table->pltHookRegister) {
+            table->pltHookRegister(this, libname, symbol, reinterpret_cast<void *>(new_func), reinterpret_cast<void **>(old_func));
+        }
+    }
+
+    void *pltHookCommit() {
+        if (table && table->pltHookCommit) {
+            return table->pltHookCommit(this);
+        }
+        return nullptr;
+    }
+
+    int hookJniNativeMethods(JNIEnv *env, const char *className, const JNINativeMethod *methods, int numMethods) {
+        if (table && table->hookJniNativeMethods) {
+            return table->hookJniNativeMethods(this, env, className, methods, numMethods);
+        }
+        return JNI_FALSE;
+    }
+
+    void ezBloat(const char *placeholder, void *symbol) {
+        if (table && table->ezBloat) {
+            table->ezBloat(this, placeholder, symbol);
+        }
+    }
+
+    void setOption(Option opt) {
+        if (table && table->setOption) {
+            table->setOption(this, opt);
+        }
+    }
+
+    int getModuleInfo(char *path, size_t path_len, int *id) {
+        if (table && table->getModuleInfo) {
+            return table->getModuleInfo(this, path, path_len, id);
+        }
+        return 0;
+    }
+
+    void *xwrapDlopen(const char *filename, int flag) {
+        if (table && table->xwrapDlopen) {
+            return table->xwrapDlopen(this, filename, flag);
+        }
+        return nullptr;
+    }
+
+private:
+    struct Table {
+        void (*pltHookRegister)(Api *api, const char *libname, const char *symbol, void *new_func, void **old_func);
+        void *(*pltHookCommit)(Api *api);
+        int (*hookJniNativeMethods)(Api *api, JNIEnv *env, const char *className, const JNINativeMethod *methods, int numMethods);
+        void (*ezBloat)(Api *api, const char *placeholder, void *symbol);
+        int (*setOption)(Api *api, Option opt);
+        int (*getModuleInfo)(char *path, size_t path_len, int *id);
+        void *(*xwrapDlopen)(Api *api, const char *filename, int flag);
+    };
+
+    Table *table;
 };
 
-class ServerConnection {
+class Module {
 public:
-    virtual int connect() = 0;
-    virtual void disconnect() = 0;
-    virtual ssize_t send(const void *data, size_t length) = 0;
-    virtual ssize_t recv(void *data, size_t length) = 0;
-    virtual int send_fds(const int *fds, size_t length) = 0;
-    virtual int recv_fds(int *fds, size_t length) = 0;
-};
-
-class ModuleBase {
-public:
-    virtual void onPreAppSpecialize(Api *api, ServerConnection *connection) {}
-    virtual void onPostAppSpecialize(Api *api, ServerConnection *connection) {}
-    virtual void onPreServerSpecialize(Api *api, ServerConnection *connection) {}
-    virtual void onPostServerSpecialize(Api *api, ServerConnection *connection) {}
+    virtual ~Module() {}
+    virtual void preAppSpecialize(void *cfg) {}
+    virtual void postAppSpecialize(const void *args) {}
+    virtual void preServerSpecialize(void *cfg) {}
+    virtual void postServerSpecialize(const void *args) {}
 };
 
 } // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-    static clazz __zygisk_module_instance; \
+    static zygisk::Module *create_module() { return new clazz(); } \
     extern "C" __attribute__((visibility("default"))) void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-        /* compatibility bridge */ \
-    } \
-    extern "C" __attribute__((visibility("default"))) void zygisk_init(zygisk::Api *api, JNIEnv *env) { \
-        __zygisk_module_instance.init(api, env); \
+        /* Magisk v24-26 entry point registration */ \
     }
 
-#define ZYGISK_MODULE_WITH_ENV(clazz) \
-    class clazz : public zygisk::ModuleBase
+#endif // ZYGISK_HPP

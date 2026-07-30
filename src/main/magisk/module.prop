@@ -1,7 +1,7 @@
-id=zygisk_imgui_menu
-name=Zygisk ImGui Universal Menu
+id=zygisk_imgui_touch_fix
+name=Zygisk ImGui Universal Touch Fix
 version=v1.0.0
 versionCode=100
 author=Elite Engineer
-description=Universal Zygisk ImGui Menu with robust touch input interception supporting all game engines (Unity, Unreal, Native).
+description=Universal Zygisk ImGui menu with robust touch event interception supporting all game engines (Magisk v24-26).
 minMagisk=24000
