@@ -1,22 +1,17 @@
-plugins {
-    id 'com.android.library'
-}
-
-android {
-    compileSdk 33
-    defaultConfig {
-        minSdk 24
-        externalNativeBuild {
-            cmake { cppFlags "-std=c++17 -fvisibility=hidden" }
-        }
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.0'
     }
 }
 
-// Ensure native libs are copied into the module zip structure
-tasks.register('prepareMagiskModule', Copy) {
-    from("${buildDir}/intermediates/cmake/release/obj")
-    into("${buildDir}/outputs/magisk_module/zygisk")
-    include "**/*.so"
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
-
-tasks.named('assembleRelease') { finalizedBy 'prepareMagiskModule' }
