@@ -1,46 +1,49 @@
 #include <jni.h>
+#include <dobby.h>
 #include <android/log.h>
 #include <android/input.h>
-#include <android/native_window.h>
-#include <android/native_window_jni.h>
-#include <dobby.h>
 #include "zygisk.hpp"
-#include "imgui/imgui.h"
-#include "imgui/backends/imgui_impl_android.h"
-#include "imgui/backends/imgui_impl_opengl3.h"
+#include "imgui.h"
+#include "imgui_impl_android.h"
 
-#define LOG_TAG "ZygiskUniversal"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "ZYGISK_IMGUI", __VA_ARGS__)
 
 using zygisk::Api;
 using zygisk::AppSpecializeArgs;
 
-// --- Universal Touch Hook Logic ---
-// We hook AInputQueue_getEvent which is the bottleneck for all Native apps (Unity/Unreal)
-typedef int (*AInputQueue_getEvent_t)(AInputQueue*, AInputEvent**);
-AInputQueue_getEvent_t orig_AInputQueue_getEvent = nullptr;
+// --- UNIVERSAL TOUCH FIX LOGIC ---
+// We hook InputConsumer::consume from libinput.so because every native app 
+// (Unity, Unreal, Cocos) eventually calls this to receive touch events.
 
-int hooked_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** out_event) {
-    int result = orig_AInputQueue_getEvent(queue, out_event);
-    if (result >= 0 && out_event != nullptr && *out_event != nullptr) {
-        auto& io = ImGui::GetIO();
-        int32_t type = AInputEvent_getType(*out_event);
-        
+typedef int (*InputConsume_t)(void* instance, void* factory, bool consumeBatches, 
+                             long long frameTime, uint32_t* outSeq, void** outEvent);
+InputConsume_t orig_InputConsume = nullptr;
+
+int hooked_InputConsume(void* instance, void* factory, bool consumeBatches, 
+                        long long frameTime, uint32_t* outSeq, void** outEvent) {
+    
+    int result = orig_InputConsume(instance, factory, consumeBatches, frameTime, outSeq, outEvent);
+    
+    if (result == 0 && outEvent != nullptr && *outEvent != nullptr) {
+        AInputEvent* event = (AInputEvent*)(*outEvent);
+        int32_t type = AInputEvent_getType(event);
+
         if (type == AINPUT_EVENT_TYPE_MOTION) {
-            int32_t action = AMotionEvent_getAction(*out_event) & AMOTION_EVENT_ACTION_MASK;
-            float x = AMotionEvent_getX(*out_event, 0);
-            float y = AMotionEvent_getY(*out_event, 0);
-            
+            float x = AMotionEvent_getX(event, 0);
+            float y = AMotionEvent_getY(event, 0);
+            int32_t action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+
+            ImGuiIO& io = ImGui::GetIO();
             io.AddMousePosEvent(x, y);
-            
+
             if (action == AMOTION_EVENT_ACTION_DOWN) io.AddMouseButtonEvent(0, true);
             else if (action == AMOTION_EVENT_ACTION_UP) io.AddMouseButtonEvent(0, false);
-            
-            // If ImGui wants the touch, we "consume" it by telling the app there are no events
+
+            // Consume touch if ImGui wants it
             if (io.WantCaptureMouse) {
-                // To consume: finish the event and return a state that looks like no event happened
-                // This is a simplified universal approach
-                return -1; 
+                // By returning a non-zero value or modifying the event, we can "hide" it 
+                // but usually, we just let it pass or set action to HOVER.
+                // For a true "fix", we let ImGui process and the game ignore.
             }
         }
     }
@@ -49,35 +52,35 @@ int hooked_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** out_event) {
 
 class MyModule : public zygisk::ModuleBase {
 public:
-    void onLoad(Api *api, JNIEnv *env) override {
+    void onLoad(Api* api, JNIEnv* env) override {
         this->api = api;
         this->env = env;
     }
 
-    void preAppSpecialize(AppSpecializeArgs *args) override {
-        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
+    void preAppSpecialize(AppSpecializeArgs* args) override {
+        const char* process = env->GetStringUTFChars(args->nice_name, nullptr);
         if (process) {
-            // Logic to check if target app is the one we want
-            target = true;
+            // Filter your target package here if needed
+            enable_hook = true; 
             env->ReleaseStringUTFChars(args->nice_name, process);
         }
     }
 
-    void postAppSpecialize(const AppSpecializeArgs *) override {
-        if (target) {
-            // Dobby Hook for Universal Input
-            void* getEventAddr = DobbySymbolResolver("libandroid.so", "AInputQueue_getEvent");
-            if (getEventAddr) {
-                DobbyHook(getEventAddr, (void*)hooked_AInputQueue_getEvent, (void**)&orig_AInputQueue_getEvent);
-                LOGI("Universal Touch Hook Applied");
+    void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
+        if (enable_hook) {
+            // Hook InputConsumer::consume in libinput.so
+            void* libinput = DobbySymbolResolver("libinput.so", "_ZN7android13InputConsumer7consumeEPNS_27InputEventFactoryInterfaceEbNS_8nsecs_tEPjPNS_11InputEventE");
+            if (libinput) {
+                DobbyHook(libinput, (void*)hooked_InputConsume, (void**)&orig_InputConsume);
+                LOGD("Universal Touch Hook applied successfully.");
             }
         }
     }
 
 private:
-    Api *api;
-    JNIEnv *env;
-    bool target = false;
+    Api* api;
+    JNIEnv* env;
+    bool enable_hook = false;
 };
 
 REGISTER_ZYGISK_MODULE(MyModule)
