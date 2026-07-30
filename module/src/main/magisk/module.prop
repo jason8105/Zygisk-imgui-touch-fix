@@ -1,0 +1,6 @@
+id=zyCheats
+name=ZyCheats Unity ImGui Menu
+version=v1.0
+versionCode=1
+author=Elite Engineer
+description=Zygisk module with Unity JNI touch-fixed ImGui menu.

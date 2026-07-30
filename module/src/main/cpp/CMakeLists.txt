@@ -1,103 +1,27 @@
-cmake_minimum_required(VERSION 3.18.1)
+cmake_minimum_required(VERSION 3.22.1)
+project(zyCheats CXX)
 
-if (NOT DEFINED MODULE_NAME)
-    message(FATAL_ERROR "MODULE_NAME is not set")
-else ()
-    project(${MODULE_NAME})
-endif ()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-message("Build type: ${CMAKE_BUILD_TYPE}")
+# Include Zygisk headers & Dobby if available or standard paths
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-set(CMAKE_CXX_STANDARD 20)
-
-set(LINKER_FLAGS "-ffixed-x18 -Wl,--hash-style=both")
-set(C_FLAGS "-Werror=format -fdata-sections -ffunction-sections -lz")
-set(CXX_FLAGS "${CXX_FLAGS} -fno-exceptions -fno-rtti")
-
-if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(C_FLAGS "${C_FLAGS} -O2 -fvisibility=hidden -fvisibility-inlines-hidden")
-    set(LINKER_FLAGS "${LINKER_FLAGS} -Wl,-exclude-libs,ALL -Wl,--gc-sections -Wl,--strip-all")
-else ()
-    set(C_FLAGS "${C_FLAGS} -O0")
-endif ()
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${C_FLAGS} ${CXX_FLAGS}")
-
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LINKER_FLAGS}")
-set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LINKER_FLAGS}")
-
-include_directories(KittyMemory)
-include_directories(Include)
-include_directories(Includes)
-include_directories(Includes/Dobby)
-include_directories(ImGui)
-include_directories(ImGui/backends)
-
-# --- ADDED: Include paths for il2cpp and xdl ---
-include_directories(xdl/include)
-include_directories(il2cpp)
-include_directories(il2cpp/src)
-
-# --- ADDED: Automatically locate source files in the new folders ---
-aux_source_directory(xdl xdl-src)
-aux_source_directory(il2cpp il2cpp-src)
-
-add_library(${MODULE_NAME}
-        SHARED
-        ImGui/imgui.cpp
-        ImGui/imgui_draw.cpp
-        ImGui/imgui_demo.cpp
-        ImGui/imgui_widgets.cpp
-        ImGui/imgui_tables.cpp
-        ImGui/backends/imgui_impl_opengl3.cpp
-        ImGui/backends/imgui_impl_android.cpp
-        KittyMemory/KittyArm64.cpp
-        KittyMemory/KittyMemory.cpp
-        KittyMemory/KittyScanner.cpp
-        KittyMemory/KittyUtils.cpp
-        KittyMemory/MemoryBackup.cpp
-        KittyMemory/MemoryPatch.cpp
-        main.cpp
-        hook.cpp
-        # --- ADDED: Inject the newly located source files ---
-        ${xdl-src}
-        ${il2cpp-src}
-        )
-
-set(DOBBY_LIB ${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_ANDROID_ARCH_ABI}/libdobby.a)
-set(CURL_LIB ${CMAKE_CURRENT_SOURCE_DIR}/libs/${CMAKE_ANDROID_ARCH_ABI}/libcurl.a)
+# Find required libraries
 find_library(log-lib log)
-find_library(egl EGL)
-find_library(android android)
-find_library(GLESV2_LIB GLESv2)
-find_library(LZ_LIB z)
+find_library(android-lib android)
 
-if (${ANDROID_PLATFORM_LEVEL} LESS 12)
-    message(FATAL_ERROR "OpenGL 2 is not supported before API level 11 /
-                      (currently using ${ANDROID_PLATFORM_LEVEL}).")
-    return()
-elseif (${ANDROID_PLATFORM_LEVEL} LESS 18)
-    add_definitions("-DDYNAMIC_ES3")
-    set(GL3STUB_SRC gl3stub.c)
-    set(OPENGL_LIB GLESv2)
-else ()
-    set(OPENGL_LIB GLESv3)
-endif (${ANDROID_PLATFORM_LEVEL} LESS 12)
+# ImGui sources (assuming standard dear imgui files are present or compiled here)
+file(GLOB IMGUI_SOURCES
+    imgui/*.cpp
+)
 
-target_link_libraries(
-        ${MODULE_NAME} log
-        ${DOBBY_LIB}
-        ${CURL_LIB}
-        ${OPENGL_LIB}
-        ${GLESV2_LIB}
-        ${android}
-        ${egl}
-        # --- ADDED: Link Zlib, required by xdl ---
-        ${LZ_LIB}
-        )
+add_library(zyCheats SHARED
+    main.cpp
+    ${IMGUI_SOURCES}
+)
 
-if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_custom_command(TARGET ${MODULE_NAME} POST_BUILD
-            COMMAND ${CMAKE_STRIP} --strip-all --remove-section=.comment "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/lib${MODULE_NAME}.so")
-endif ()
+target_link_libraries(zyCheats
+    ${log-lib}
+    ${android-lib}
+)
