@@ -23,17 +23,21 @@ jobs:
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Build with Gradle
+    - name: Build with Gradle (Debug)
       run: |
         chmod +x gradlew
-        ./gradlew assembleRelease
+        ./gradlew assembleDebug
 
     - name: Prepare Magisk Module Package
       run: |
         mkdir -p final_package
-        # Locate the built module zip or assemble from build output
-        if [ -d "app/build/outputs/apk/release" ]; then
-          cp app/build/outputs/apk/release/*.apk final_package/Zygisk-ImGui-Module.zip
+        # Locate the built module zip or assemble from debug build output
+        if [ -d "app/build/outputs/apk/debug" ]; then
+          cp app/build/outputs/apk/debug/*.apk final_package/Zygisk-ImGui-Module.zip
+        elif [ -d "app/build/intermediates/cmake/debug/obj" ]; then
+          mkdir -p zygisk/arm64-v8a zygisk/armeabi-v7a
+          cp -r app/build/intermediates/cmake/debug/obj/* zygisk/ 2>/dev/null || true
+          zip -r final_package/Zygisk-ImGui-Module.zip module.prop customize.sh zygisk/
         elif [ -d "out" ]; then
           cd out
           zip -r ../final_package/Zygisk-ImGui-Module.zip .

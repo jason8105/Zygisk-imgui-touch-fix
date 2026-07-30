@@ -1,9 +1,55 @@
 import os
+import sys
 import time
 import subprocess
 import requests
 import re
 import json
+import datetime
+
+# ==========================================
+# DUAL LOGGING SETUP (Display + File)
+# ==========================================
+LOG_DIR = "/storage/emulated/0/VMoutput/Magisk/my_repo"
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+except Exception:
+    pass
+
+LOG_FILE = os.path.join(LOG_DIR, "script_history.txt")
+
+class TeeLogger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log_file_path = filename
+        try:
+            self.log = open(filename, "a", encoding="utf-8")
+        except Exception:
+            self.log = None
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.terminal.flush()
+        if self.log:
+            try:
+                self.log.write(message)
+                self.log.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        self.terminal.flush()
+        if self.log:
+            try:
+                self.log.flush()
+            except Exception:
+                pass
+
+# Redirect stdout and stderr to both screen and file
+sys.stdout = TeeLogger(LOG_FILE)
+sys.stderr = sys.stdout
+
+print(f"[*] Logging initialized. Saving session history to: {LOG_FILE}")
 
 # API Keys pool
 API_KEYS_POOL = {
@@ -103,14 +149,13 @@ def check_artifact_size(run_id):
             size = art.get("size_in_bytes", 0)
             name = art.get("name", "unknown")
             print(f"[*] Found Artifact: '{name}' | Size: {size} bytes")
-            # If artifact is less than 5KB, it's just the empty text-only zip bug (~746 bytes)
             if size < 5000:
                 print(f"[!] Critical: Artifact size is too small ({size} bytes). Missing compiled binaries (.so files)!")
                 return False
         return True
     except Exception as e:
         print(f"[!] Error verifying artifact size: {e}")
-        return True # Assume valid if network check fails temporarily
+        return True
 
 def get_workflow_logs(run_id, max_retries=5):
     print("[*] Fetching failed job details to get direct text logs...")
@@ -218,25 +263,35 @@ def apply_ai_patches(ai_response):
             with open("ai_fix_suggestion.txt", "r", encoding="utf-8") as f:
                 ai_response = f.read()
 
-    commit_match = re.search(r"=== COMMIT:\s*(.*?)\s*===", ai_response)
+    commit_match = re.search(r"=== COMMIT:\s*([^\n]+)\s*===", ai_response)
     commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve packaging path and ensure compiled binaries are included in zip"
 
-    pattern_file = r"=== FILE:\s*(.*?)===\s*\n(.*?)\s*=== END FILE ==="
+    # Bulletproof regex: file path cannot contain newlines ([^\n]+)
+    pattern_file = r"=== FILE:\s*([^\n]+)===\s*\n(.*?)(?==== FILE:|=== DELETE:|\Z)"
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
+    
+    pattern_explicit = r"=== FILE:\s*([^\n]+)===\s*\n(.*?)\s*=== END FILE ==="
+    matches_explicit = re.findall(pattern_explicit, ai_response, re.DOTALL)
+    if matches_explicit:
+        matches_file = matches_explicit
+
     for file_path, content in matches_file:
-        file_path = file_path.strip()
+        file_path = file_path.strip().replace("\r", "")
+        content = content.strip().replace("=== END FILE ===", "").strip()
+        if not file_path or len(file_path) > 200:
+            continue
         dir_name = os.path.dirname(file_path)
         if dir_name and not os.path.exists(dir_name):
             os.makedirs(dir_name, exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as f:
-            f.write(content.strip() + "\n")
+            f.write(content + "\n")
         changes_made.append(f"Updated/Created: {file_path}")
 
-    pattern_del = r"=== DELETE:\s*(.*?)===\s*=== END DELETE ==="
+    pattern_del = r"=== DELETE:\s*([^\n]+)===\s*(?:=== END DELETE ===)?"
     matches_del = re.findall(pattern_del, ai_response, re.DOTALL)
     for file_path in matches_del:
-        file_path = file_path.strip()
-        if os.path.exists(file_path):
+        file_path = file_path.strip().replace("\r", "")
+        if file_path and os.path.exists(file_path):
             os.remove(file_path)
             changes_made.append(f"Deleted: {file_path}")
 
@@ -299,7 +354,7 @@ def master_loop():
                     continue
                 else:
                     print("[!] Artifact validation failed (empty zip size). Forcing Auto-Heal...")
-                    conclusion = "failure" # Convert success to failure to force AI healing of packaging path
+                    conclusion = "failure"
 
             if conclusion in ["failure", "cancelled", "timed_out"]:
                 print(f"[!] Build failed or artifact was invalid (conclusion: {conclusion}). Initiating Auto-Heal...")
