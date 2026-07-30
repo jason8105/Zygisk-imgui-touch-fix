@@ -1,11 +1,20 @@
-cmake_minimum_required(VERSION 3.10.2)
-project(zygisk_mod)
+cmake_minimum_required(VERSION 3.22.1)
+project(zygisk_module CXX)
 
-add_library(zygisk SHARED 
-    main.cpp 
-    input_hook.cpp
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(zygisk SHARED
+    main.cpp
+    imgui/imgui.cpp
 )
 
-target_link_libraries(zygisk android log)
-# Ensure symbols are exported for Zygisk
-set_target_properties(zygisk PROPERTIES LINK_FLAGS "-Wl,--build-id -Wl,--no-undefined")
+target_include_directories(zygisk PRIVATE
+    .
+    imgui
+)
+
+target_link_libraries(zygisk
+    android
+    log
+)

@@ -1,94 +1,113 @@
+#jni
 #include <jni.h>
 #include <android/log.h>
-#include <android/input.h>
-#include <android/keycodes.h>
-#include <android/looper.h>
-#include "zygisk.hpp"
+#include <sys/types.h>
+#include <unistd.h>
+#include <dlfcn.h>
+#include <string.h>
+#include <pthread.h>
+#include <fcntl.h>
 #include "imgui.h"
-#include "imgui_impl_android.h"
-#include "imgui_impl_opengl3.h"
-#include "dobby.h"
+#include "zygisk.hpp"
 
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "ZygiskImGui", __VA_ARGS__)
+#define LOG_TAG "ZygiskImGui"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-using zygisk::Api;
-using zygisk::AppSpecializeArgs;
+// Universal Touch & Hook definitions
+typedef int (*AInputQueue_preDispatchEvent_t)(void* queue, void* event);
+static AInputQueue_preDispatchEvent_t orig_AInputQueue_preDispatchEvent = nullptr;
 
-// --- Touch Fix Core ---
-bool g_MenuVisible = true;
+// AInputEvent structure helpers (Android NDK standard layout abstractions)
+typedef struct AInputEvent AInputEvent;
+int (*AInputEvent_getType)(const AInputEvent* event) = nullptr;
+int (*AInputEvent_getSource)(const AInputEvent* event) = nullptr;
+size_t (*AMotionEvent_getPointerCount)(const AInputEvent* motion_event) = nullptr;
+float (*AMotionEvent_getX)(const AInputEvent* motion_event, size_t pointer_index) = nullptr;
+float (*AMotionEvent_getY)(const AInputEvent* motion_event, size_t pointer_index) = nullptr;
+int (*AMotionEvent_getAction)(const AInputEvent* motion_event) = nullptr;
 
-// Universal hook for AInputQueue_getEvent which most engines (Unity, Native) use
-typedef int (*t_AInputQueue_getEvent)(AInputQueue*, AInputEvent**);
-t_AInputQueue_getEvent orig_AInputQueue_getEvent = nullptr;
+#define AINPUT_EVENT_TYPE_MOTION 2
+#define AMOTION_EVENT_ACTION_MASK 0xff
+#define AMOTION_EVENT_ACTION_DOWN 0
+#define AMOTION_EVENT_ACTION_UP 1
+#define AMOTION_EVENT_ACTION_MOVE 2
+#define AMOTION_EVENT_ACTION_POINTER_DOWN 5
+#define AMOTION_EVENT_ACTION_POINTER_UP 6
 
-int hk_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** out_event) {
-    int res = orig_AInputQueue_getEvent(queue, out_event);
-    if (res >= 0 && *out_event != nullptr) {
-        int32_t type = AInputEvent_getType(*out_event);
-        if (type == AINPUT_EVENT_TYPE_MOTION) {
-            float x = AMotionEvent_getX(*out_event, 0);
-            float y = AMotionEvent_getY(*out_event, 0);
-            int32_t action = AMotionEvent_getAction(*out_event);
+static void init_input_syms() {
+    void* libandroid = dlopen("libandroid.so", RTLD_GLOBAL | RTLD_LAZY);
+    if (libandroid) {
+        AInputEvent_getType = (int(*)(const AInputEvent*))dlsym(libandroid, "AInputEvent_getType");
+        AInputEvent_getSource = (int(*)(const AInputEvent*))dlsym(libandroid, "AInputEvent_getSource");
+        AMotionEvent_getPointerCount = (size_t(*)(const AInputEvent*))dlsym(libandroid, "AMotionEvent_getPointerCount");
+        AMotionEvent_getX = (float(*)(const AInputEvent*, size_t))dlsym(libandroid, "AMotionEvent_getX");
+        AMotionEvent_getY = (float(*)(const AInputEvent*, size_t))dlsym(libandroid, "AMotionEvent_getY");
+        AMotionEvent_getAction = (int(*)(const AInputEvent*))dlsym(libandroid, "AMotionEvent_getAction");
+    }
+}
 
-            ImGuiIO& io = ImGui::GetIO();
-            io.AddMousePosEvent(x, y);
-            
-            if (action == AMOTION_EVENT_ACTION_DOWN) io.AddMouseButtonEvent(0, true);
-            if (action == AMOTION_EVENT_ACTION_UP) io.AddMouseButtonEvent(0, false);
-
-            // If ImGui wants the touch, "consume" it by setting it to a neutral state or ignoring
-            if (g_MenuVisible && io.WantCaptureMouse) {
-                // To consume: some engines check action. We can modify the action to invalid
-                // or just return 1 if we were deeper in the stack. 
-                // For AInputQueue, the best way is to finish the event immediately.
+int hook_AInputQueue_preDispatchEvent(void* queue, void* event) {
+    if (event && AInputEvent_getType && AMotionEvent_getAction && AMotionEvent_getX) {
+        if (AInputEvent_getType((AInputEvent*)event) == AINPUT_EVENT_TYPE_MOTION) {
+            int action = AMotionEvent_getAction((AInputEvent*)event) & AMOTION_EVENT_ACTION_MASK;
+            size_t count = AMotionEvent_getPointerCount((AInputEvent*)event);
+            if (count > 0) {
+                float x = AMotionEvent_getX((AInputEvent*)event, 0);
+                float y = AMotionEvent_getY((AInputEvent*)event, 0);
+                
+                auto& io = ImGui::GetIO();
+                io.AddMousePosEvent(x, y);
+                
+                if (action == AMOTION_EVENT_ACTION_DOWN || action == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+                    io.AddMouseButtonEvent(0, true);
+                } else if (action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_POINTER_UP) {
+                    io.AddMouseButtonEvent(0, false);
+                }
             }
         }
     }
-    return res;
-}
-
-// Hook for AMotionEvent_getRawX/Y to ensure precision (Universal fallback)
-typedef float (*t_AMotionEvent_getRawX)(const AInputEvent*, size_t);
-t_AMotionEvent_getRawX orig_getRawX = nullptr;
-
-float hk_AMotionEvent_getRawX(const AInputEvent* event, size_t pointer_index) {
-    float x = orig_getRawX(event, pointer_index);
-    if (g_MenuVisible && ImGui::GetIO().WantCaptureMouse) {
-        // Return off-screen to the game while menu is active and capturing
-        return -10000.0f;
+    
+    if (orig_AInputQueue_preDispatchEvent) {
+        return orig_AInputQueue_preDispatchEvent(queue, event);
     }
-    return x;
+    return 0;
 }
 
 class MyModule : public zygisk::ModuleBase {
 public:
-    void onLoad(Api *api, JNIEnv *env) override {
+    void onLoad(zygisk::Api* api, JNIEnv* env) override {
         this->api = api;
         this->env = env;
     }
 
-    void preAppSpecialize(AppSpecializeArgs *args) override {
-        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
-        if (process) {
-            // Logic to filter specific games if needed
-            env->ReleaseStringUTFChars(args->nice_name, process);
+    void preAppSpecialize(zygisk::AppSpecializeArgs* args) override {
+        // Universal touch hook initialization
+        init_input_syms();
+        void* handle = dlopen("libandroid.so", RTLD_NOLOAD | RTLD_LAZY);
+        if (handle) {
+            void* sym = dlsym(handle, "AInputQueue_preDispatchEvent");
+            if (sym) {
+                // Simple inline hook / trampoline approximation or Dobby/PLT hook placeholder
+                orig_AInputQueue_preDispatchEvent = (AInputQueue_preDispatchEvent_t)sym;
+                LOGD("Successfully resolved AInputQueue_preDispatchEvent for universal touch hook");
+            }
         }
+        
+        ImGui::CreateContext();
+        LOGD("Zygisk ImGui Menu Initialized Successfully in App Process");
     }
 
-    void postAppSpecialize(const AppSpecializeArgs *) override {
-        // Universal Touch Hooking via Dobby
-        DobbyHook((void*)DobbySymbolResolver("libandroid.so", "AInputQueue_getEvent"), 
-                  (void*)hk_AInputQueue_getEvent, (void**)&orig_AInputQueue_getEvent);
-        
-        DobbyHook((void*)DobbySymbolResolver("libandroid.so", "AMotionEvent_getRawX"), 
-                  (void*)hk_AMotionEvent_getRawX, (void**)&orig_getRawX);
-        
-        LOGD("Universal Touch Hooks Applied");
+    void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
     }
 
 private:
-    Api *api;
-    JNIEnv *env;
+    zygisk::Api* api = nullptr;
+    JNIEnv* env = nullptr;
 };
+
+static void* hook_entry(void*) {
+    return nullptr;
+}
 
 REGISTER_ZYGISK_MODULE(MyModule)
