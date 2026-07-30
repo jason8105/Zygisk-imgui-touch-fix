@@ -1,0 +1,47 @@
+name: Build ImGui Menu
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Install CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.18.1'
+
+      - name: Build Mod Menu
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :module:assembleRelease
+
+      - name: Create Proper Magisk Structure
+        run: |
+          mkdir -p final_package
+          # Locate the built zip from Gradle output and ensure it is structured for Magisk
+          cd out/
+          unzip -q *.zip -d ../temp_extracted
+          cd ../temp_extracted
+          
+          # Zip up the contents directly so module.prop is at the root
+          zip -r ../final_package/Subway-ImGui-Installable.zip .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Subway-ImGui-Installable
+          path: final_package/*.zip
+          
