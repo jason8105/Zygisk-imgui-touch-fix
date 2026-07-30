@@ -1,72 +1,60 @@
 plugins {
-    id 'com.android.application'
+    id 'com.android.library'
 }
 
 android {
-    namespace 'com.zygisk.imgui'
+    namespace 'com.example.zygiskimgui'
     compileSdk 33
 
     defaultConfig {
-        applicationId "com.zygisk.imgui"
-        minSdk 26
+        minSdk 24
         targetSdk 33
-        versionCode 1
-        versionName "1.0"
-
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17"
-                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
+                arguments "-DANDROID_STL=c++_static"
             }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/jni/CMakeLists.txt"
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-}
-
-import org.apache.tools.ant.filters.FixCrLfFilter
-
-task buildMagiskModule(type: Zip) {
-    dependsOn 'assembleRelease'
-    archiveFileName = 'zygisk-imgui-touch-fix-magisk.zip'
+tasks.register('zipModule', Zip) {
+    dependsOn 'externalNativeBuildRelease'
+    
+    archiveFileName = "Zygisk-ImGui-Universal.zip"
     destinationDirectory = file("$buildDir/outputs/magisk")
 
-    from("$projectDir/src/main/magisk") {
-        include 'module.prop'
-        include 'customize.sh'
-        include 'post-fs-data.sh'
+    // Magisk metadata files
+    from(file("src/main/resources")) {
+        include "module.prop"
+        include "verify.sh"
+        include "service.sh"
+        include "uninstall.sh"
     }
 
-    into("zygisk") {
-        from("$buildDir/intermediates/cmake/release/obj") {
-            include "**/libzygisk.so"
+    // Process the binaries for each ABI
+    def abiList = ['arm64-v8a', 'armeabi-v7a']
+    abiList.each { abi ->
+        from(file("$buildDir/intermediates/cmake/release/obj/${abi}/libzygisk.so")) {
+            into "zygisk/${abi}"
         }
     }
-}
-
-tasks.whenTaskAdded { task ->
-    if (task.name == 'assembleRelease') {
-        task.finalizedBy('buildMagiskModule')
-    }
+    
+    // Ensure standard Magisk structure
+    into("/")
 }

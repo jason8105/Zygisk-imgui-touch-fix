@@ -1,34 +1,22 @@
-cmake_minimum_required(VERSION 3.22.1)
-project("zygisk_imgui")
+cmake_minimum_required(VERSION 3.18.1)
+project("zygiskimgui")
 
-# Add ImGui files (assumed to be in imgui/ folder)
-set(IMGUI_DIR imgui)
-set(IMGUI_SOURCES
-    ${IMGUI_DIR}/imgui.cpp
-    ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
-    ${IMGUI_DIR}/imgui_demo.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_android.h
-    ${IMGUI_DIR}/backends/imgui_impl_android.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.h
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-)
-
+# Include ImGui and Dobby (ensure these paths match your repo structure)
+# For this fix, we assume standard ImGui and Dobby setup
 add_library(zygisk SHARED
-    main.cpp
-    hooks.cpp
-    ${IMGUI_SOURCES}
-)
-
-target_include_directories(zygisk PRIVATE
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
+        main.cpp
+        imgui/imgui.cpp
+        imgui/imgui_draw.cpp
+        imgui/imgui_widgets.cpp
+        imgui/imgui_tables.cpp
+        imgui/backends/imgui_impl_android.cpp
+        imgui/backends/imgui_impl_opengl3.cpp
 )
 
 target_link_libraries(zygisk
-    android
-    log
-    EGL
-    GLESv3
+        android
+        log
+        EGL
+        GLESv3
+        Dobby # Required for Universal Touch Hooking
 )
