@@ -1,6 +1,6 @@
-id=zygisk_imgui_touch_fix
-name=Zygisk ImGui Touch Fix
-version=v1.0
-versionCode=1
-author=Developer
-description=Zygisk module with Unity JNI touch-fixed ImGui menu.
+id=zygisk_touch_fix
+name=Zygisk Unity ImGui Touch Fix
+version=v1.0.0
+versionCode=100
+author=Elite Engineer
+description=Zygisk module providing native Unity JNI touch injection and ImGui integration.

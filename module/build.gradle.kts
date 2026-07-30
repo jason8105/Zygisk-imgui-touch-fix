@@ -3,30 +3,17 @@ plugins {
 }
 
 android {
-    namespace = "com.zy.cheats"
+    namespace = "com.zygisk.touchfix"
     compileSdk = 34
 
     defaultConfig {
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
-
+        
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
-                arguments += "-DANDROID_STL=c++_shared"
             }
-        }
-    }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
 
@@ -37,27 +24,24 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
     }
 }
 
-tasks.register("buildMagiskZip", Zip::class) {
+tasks.register("buildMagiskModule", Zip::class) {
     dependsOn("assembleRelease")
-    archiveFileName.set("zyCheats-Magisk-Module.zip")
+    archiveFileName.set("zygisk-touch-fix-module.zip")
     destinationDirectory.set(file("$buildDir/outputs/magisk"))
 
     from("src/main/magisk") {
-        include("module.prop")
-        include("customize.sh")
-        include("post-fs-data.sh")
-        include("service.sh")
+        include("module.prop", "customize.sh", "post-fs-data.sh", "service.sh")
     }
     
-    // Package compiled native libraries into Zygisk structure
+    // Package compiled native library into zygisk folder structure
     from("$buildDir/intermediates/cmake/release/obj") {
-        include("**/zyCheats.so")
         into("zygisk")
     }
 }
