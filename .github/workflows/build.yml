@@ -2,7 +2,11 @@ name: Build ImGui Menu
 
 on:
   workflow_dispatch:
-
+  push:
+    branches:
+      - main
+      - master
+      
 jobs:
   build:
     runs-on: ubuntu-latest
