@@ -3,20 +3,25 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui'
+    namespace "com.example.zygisk.imgui"
     compileSdk 34
 
     defaultConfig {
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
-
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -frtti -fexceptions"
-                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden -fno-rtti -fno-exceptions"
+                arguments "-DANDROID_STL=c++_static"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
         }
     }
 
@@ -25,45 +30,64 @@ android {
             minifyEnabled false
         }
     }
+}
 
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
+import org.apache.tools.cmake.util.FileUtils
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
+
+task packageMagiskModule(dependsOn: 'assembleRelease') {
+    doLast {
+        def magiskDir = file("$buildDir/magisk_module")
+        if (magiskDir.exists()) magiskDir.deleteDir()
+        magiskDir.mkdirs()
+
+        // Create module.prop
+        def moduleProp = file("$magiskDir/module.prop")
+        moduleProp.text = """id=zygisk_imgui_touch_fix
+name=Universal Zygisk ImGui
+version=v1.0
+versionCode=1
+author=Elite Engineer
+description=Universal ImGui Menu with AInputQueue Touch Fix for Magisk 24-26.
+minMagisk=24000
+zygisk=true
+"""
+
+        // Copy binaries into zygisk/<abi>/libzygisk.so
+        def abiList = ['arm64-v8a', 'armeabi-v7a']
+        abiList.each { abi ->
+            def libFile = file("$buildDir/intermediates/cmake/release/obj/$abi/libzygisk.so")
+            if (libFile.exists()) {
+                def destDir = file("$magiskDir/zygisk/$abi")
+                destDir.mkdirs()
+                copy {
+                    from libFile
+                    into destDir
+                }
+            }
         }
-    }
 
-    packagingOptions {
-        jniLibs {
-            useLegacyPackaging true
+        // Create placeholder files required by Magisk
+        file("$magiskDir/common").mkdirs()
+        file("$magiskDir/META-INF/com/google/android/update-binary").text = "#!/sbin/sh\n"
+        file("$magiskDir/META-INF/com/google/android/updater-script").text = "# Magisk module"
+
+        // Zip it up
+        def zipFile = file("$buildDir/outputs/zygisk-imgui-module.zip")
+        def zipOS = new ZipOutputStream(new FileOutputStream(zipFile))
+        magiskDir.eachFileRecurse { f ->
+            if (!f.isDirectory()) {
+                def entryName = magiskDir.toPath().relativize(f.toPath()).toString()
+                zipOS.putNextEntry(new ZipEntry(entryName))
+                zipOS.write(f.readBytes())
+                zipOS.closeEntry()
+            }
         }
+        zipOS.close()
+        println "SUCCESS: Magisk module created at ${zipFile.absolutePath}"
     }
 }
 
-dependencies {
-}
-
-task buildMagiskModule(type: Zip) {
-    dependsOn 'assembleRelease'
-    archiveFileName = "Zygisk-ImGui-Universal-Touch-Fix.zip"
-    destinationDirectory = file("$buildDir/outputs/magisk")
-
-    from("$projectDir/src/main/magisk") {
-        include 'module.prop'
-        include 'customize.sh'
-        include 'post-fs-data.sh'
-    }
-
-    into("zygisk") {
-        from("$buildDir/intermediates/merged_native_libs/release/out/lib") {
-            include "armeabi-v7a/libzygisk.so"
-            include "arm64-v8a/libzygisk.so"
-            include "x86/libzygisk.so"
-            include "x86_64/libzygisk.so"
-        }
-    }
-}
-
-tasks.named('assembleRelease').configure {
-    finalizedBy('buildMagiskModule')
-}
+// Map assembleRelease to our packaging task to fix the CI error
+assembleRelease.finalizedBy(packageMagiskModule)

@@ -1,32 +1,24 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(zygisk)
+project("zygisk_imgui")
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+# Add your ImGui sources and Dobby (for hooking)
+# Assuming dobby and imgui are in the same directory or submodules
 add_library(zygisk SHARED
     main.cpp
+    input_hook.cpp
     imgui/imgui.cpp
     imgui/imgui_draw.cpp
-    imgui/imgui_tables.cpp
     imgui/imgui_widgets.cpp
-    imgui/imgui_impl_opengl3.cpp
-    imgui/imgui_impl_android.cpp
+    imgui/imgui_tables.cpp
+    imgui/imgui_demo.cpp
+    imgui/backends/imgui_impl_android.cpp
+    imgui/backends/imgui_impl_opengl3.cpp
 )
 
-target_include_directories(zygisk PRIVATE
-    imgui
-    zygisk
-)
-
+# Use find_library for NDK logs and android libs
 find_library(log-lib log)
 find_library(android-lib android)
-find_library(glesv2-lib GLESv2)
-find_library( EGL-lib EGL )
+find_library(gles3-lib GLESv3)
 
-target_link_libraries(zygisk
-    ${log-lib}
-    ${android-lib}
-    ${glesv2-lib}
-    ${EGL-lib}
-)
+target_include_directories(zygisk PRIVATE . imgui imgui/backends dobby/include)
+target_link_libraries(zygisk ${log-lib} ${android-lib} ${gles3-lib} dobby)
