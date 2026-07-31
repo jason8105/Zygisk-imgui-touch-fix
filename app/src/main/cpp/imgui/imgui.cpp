@@ -1,15 +1,24 @@
 #include "imgui.h"
+#include <stdio.h>
+#include <stdarg.h>
+
+static ImGuiIO g_IO;
+static ImDrawData g_DrawData;
+
 namespace ImGui {
-    static IO g_IO;
-    void CreateContext() {}
-    void DestroyContext() {}
-    IO& GetIO() { return g_IO; }
+    bool DebugCheckVersionAndDataLayout(const char* version_str, size_t sz_io, size_t sz_style, size_t sz_vec2, size_t sz_vec4, size_t sz_vert, size_t sz_idx) {
+        return true;
+    }
+    void* CreateContext() { return nullptr; }
+    ImGuiIO& GetIO() { return g_IO; }
+    void StyleColorsDark() {}
     void NewFrame() {}
     void Render() {}
-    void Begin(const char*, bool*, int) {}
+    ImDrawData* GetDrawData() { return &g_DrawData; }
+    bool Begin(const char* name, bool* p_open, ImGuiWindowFlags flags) { return true; }
     void End() {}
-    bool Button(const char*, const ImVec2&) { return false; }
-    void Text(const char*, ...) {}
+    void Text(const char* fmt, ...) {}
+    bool Checkbox(const char* label, bool* v) { return false; }
+    bool SliderFloat(const char* label, float* v, float v_min, float v_max) { return false; }
+    bool Button(const char* label) { return false; }
 }
-void IO::AddMousePosEvent(float, float) {}
-void IO::AddMouseButtonEvent(int, bool) {}

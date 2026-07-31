@@ -10,13 +10,17 @@ android {
         applicationId "com.zygisk.imgui"
         minSdk 24
         targetSdk 34
-        versionCode 100
-        versionName "1.0.0"
+        versionCode 1
+        versionName "1.0"
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden"
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden"
+                arguments "-DANDROID_STL=c++_static"
             }
         }
     }
@@ -26,7 +30,7 @@ android {
             minifyEnabled false
         }
         debug {
-            debuggable true
+            minifyEnabled false
         }
     }
 
@@ -38,40 +42,30 @@ android {
     }
 }
 
-task packageMagiskModule(type: Zip) {
-    dependsOn 'assembleRelease'
+task zipModule(type: Zip) {
+    archiveFileName = "zygisk_imgui_module.zip"
+    destinationDirectory = file("${project.rootDir}/out")
 
-    archiveFileName = 'zygisk-module.zip'
-    destinationDirectory = file("${rootDir}/out")
-
-    from("${rootDir}/module") {
-        include 'module.prop'
-        include 'customize.sh'
+    from("${project.rootDir}/module.prop")
+    if (file("${project.rootDir}/service.sh").exists()) {
+        from("${project.rootDir}/service.sh")
     }
 
-    // Map compiled libzygisk.so for all target ABIs into zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
-    ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].each { abi ->
-        def found = false
-        fileTree(dir: "${buildDir}", include: "**/lib/${abi}/libzygisk.so").each { soFile ->
-            if (!found) {
-                from(soFile) {
-                    into "zygisk/${abi}"
-                    rename { "libzygisk.so" }
-                }
-                from(soFile) {
-                    into "zygisk"
-                    rename { "${abi}.so" }
-                }
-                found = true
+    def abis = ['arm64-v8a', 'armeabi-v7a']
+    abis.each { abi ->
+        into("zygisk/${abi}") {
+            from(fileTree(dir: "${buildDir}/intermediates", include: "**/lib/${abi}/libzygisk.so")) {
+                eachFile { path = "libzygisk.so" }
+            }
+            from(fileTree(dir: "${buildDir}/intermediates/cmake", include: "**/${abi}/libzygisk.so")) {
+                eachFile { path = "libzygisk.so" }
             }
         }
     }
-
-    doLast {
-        println "Zygisk flashable module created successfully at: ${destinationDirectory.get()}/${archiveFileName.get()}"
-    }
 }
 
-tasks.matching { it.name == 'assembleRelease' || it.name == 'assemble' }.configureEach { task ->
-    task.finalizedBy packageMagiskModule
+tasks.configureEach { task ->
+    if (task.name.startsWith("assemble")) {
+        task.finalizedBy(zipModule)
+    }
 }

@@ -1,2 +1,2 @@
-rootProject.name = "zygisk_imgui_module"
+rootProject.name = "ZygiskImGui"
 include ':app'
