@@ -1,3 +1,2 @@
-#!/sbin/sh
-# Early startup service script for Zygisk ImGui module
-MODDIR=${0%/*}
+#!/system/bin/sh
+# Late-start service script for Zygisk ImGui module

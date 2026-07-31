@@ -1,15 +1,9 @@
 #pragma once
 
 #include <jni.h>
-#include <stddef.h>
 #include <stdint.h>
 
 namespace zygisk {
-
-enum Option : uint32_t {
-    FORCE_DENYLIST_UNMOUNT = 0,
-    DLCLOSE_MODULE_LIBRARY = 1,
-};
 
 struct AppSpecializeArgs {
     jint *uid;
@@ -39,12 +33,16 @@ struct ServerSpecializeArgs {
     jlong *effective_capabilities;
 };
 
+enum Option : uint32_t {
+    FORCE_DENYLIST_UNMOUNT = 0,
+    DLCLOSE_MODULE_FOR_UNLOADED_PROCESS = 1,
+};
+
 class Api {
 public:
-    virtual void connectCompanion() = 0;
-    virtual int getModuleDir() = 0;
-    virtual void setOption(Option option) = 0;
-    virtual void exemptAppProcess() = 0;
+    virtual bool connectCompanion() = 0;
+    virtual int getCompanionSocket() = 0;
+    virtual void setOption(Option opt) = 0;
 };
 
 class ModuleBase {
@@ -58,14 +56,13 @@ public:
 
 } // namespace zygisk
 
-extern "C" {
-typedef void (*zygisk_module_entry_t)(zygisk::Api *, JNIEnv *);
-}
-
 #define REGISTER_ZYGISK_MODULE(clazz) \
-static void zygisk_module_entry_impl(zygisk::Api *api, JNIEnv *env) { \
-    static clazz instance; \
-    static zygisk::ModuleBase *module = &instance; \
-    module->onLoad(api, env); \
+static clazz _zygisk_module_instance; \
+extern "C" __attribute__((visibility("default"))) \
+void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+    _zygisk_module_instance.onLoad(api, env); \
 } \
-extern "C" [[gnu::visibility("default")]] zygisk_module_entry_t zygisk_module_entry = zygisk_module_entry_impl;
+extern "C" __attribute__((visibility("default"))) \
+zygisk::ModuleBase* zygisk_companion_entry() { \
+    return nullptr; \
+}
