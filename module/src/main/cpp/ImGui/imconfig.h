@@ -1,2 +1,3 @@
 #pragma once
-// ImGui Android Config
+
+#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS

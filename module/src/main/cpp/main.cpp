@@ -1,39 +1,31 @@
-#include <jni.h>
 #include "zygisk.hpp"
-#include "input_hook.h"
+#include "touch_hook.hpp"
 #include <android/log.h>
+#include <pthread.h>
+#include <unistd.h>
 
-using zygisk::Api;
-using zygisk::AppSpecializeArgs;
-
-class MyModule : public zygisk::ModuleBase {
+class ZygiskModule : public zygisk::ModuleBase {
 public:
-    void onLoad(Api *api, JNIEnv *env) override {
+    void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
     }
 
-    void preAppSpecialize(AppSpecializeArgs *args) override {
-        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
-        if (process) {
-            // Filter your target package here or apply to all
-            this->is_target = true; 
-            env->ReleaseStringUTFChars(args->nice_name, process);
-        }
-    }
-
     void postAppSpecialize(const zygisk::AppSpecializeArgs *args) override {
-        if (this->is_target) {
-            // Standard Magisk 24-26 way to initialize hooks in the app process
-            install_input_hooks();
-            // Note: ImGui initialization should happen where EGL/GLES is initialized (e.g. hook eglSwapBuffers)
-        }
+        if (!args || !args->nice_name) return;
+
+        pthread_t thread;
+        pthread_create(&thread, nullptr, [](void *) -> void * {
+            usleep(1500000);
+            TouchHook::Init();
+            return nullptr;
+        }, nullptr);
+        pthread_detach(thread);
     }
 
 private:
-    Api *api;
-    JNIEnv *env;
-    bool is_target = false;
+    zygisk::Api *api = nullptr;
+    JNIEnv *env = nullptr;
 };
 
-REGISTER_ZYGISK_MODULE(MyModule)
+REGISTER_ZYGISK_MODULE(ZygiskModule)

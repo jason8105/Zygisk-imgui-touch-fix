@@ -1,63 +1,17 @@
 #pragma once
+
 #include <jni.h>
 #include <stddef.h>
 #include <stdint.h>
 
 namespace zygisk {
 
-enum ApiVersion {
-    v1 = 1,
-    v2 = 2,
-    v3 = 3,
-    v4 = 4
-};
+struct Api;
+struct AppSpecializeArgs;
+struct ServerSpecializeArgs;
 
-enum Option {
-    // Daemon connection state
-    FORCE_DENYLIST_UNMOUNT = 1
-};
-
-class AppSpecializeArgs {
+class ModuleBase {
 public:
-    jint *uid;
-    jint *gid;
-    jobjectArray *gids;
-    jint *runtimeFlags;
-    jobjectArray *seInfo;
-    jobjectArray *name;
-    jstring *deviceCode;
-    jstring *niceName;
-    jstring *workDir;
-    jobjectArray *pkgDataInfoList;
-    jobjectArray *whitelistedDataInfoList;
-    jboolean *skipAppProfile;
-    jstring *instructionSet;
-    jstring *appDataDir;
-};
-
-class ServerSpecializeArgs {
-public:
-    jint *uid;
-    jint *gid;
-    jobjectArray *gids;
-    jint *runtimeFlags;
-    jobjectArray *seInfo;
-    jobjectArray *niceName;
-};
-
-class Api {
-public:
-    virtual ~Api() = default;
-    virtual void *pltHookRegister(const char *lib_name, const char *symbol, void *new_func, void **old_func) = 0;
-    virtual void pltHookCommit() = 0;
-    virtual int moduleGetDataDir() = 0;
-    virtual void setOption(Option opt) = 0;
-    virtual int connectCompanion() = 0;
-};
-
-class Module {
-public:
-    virtual ~Module() = default;
     virtual void onLoad(Api *api, JNIEnv *env) {}
     virtual void preAppSpecialize(AppSpecializeArgs *args) {}
     virtual void postAppSpecialize(const AppSpecializeArgs *args) {}
@@ -65,15 +19,54 @@ public:
     virtual void postServerSpecialize(const ServerSpecializeArgs *args) {}
 };
 
+enum Option : uint32_t {
+    FORCE_DENYLIST_UNMOUNT = 0,
+    DLCLOSE_MODULE_LIBRARY = 1,
+};
+
+struct Api {
+    bool (*registerModule)(ModuleBase *module);
+    int (*connectCompanion)();
+    void (*setOption)(Option opt);
+};
+
+struct AppSpecializeArgs {
+    jint *uid;
+    jint *gid;
+    jintArray *gids;
+    jint *runtime_flags;
+    jobjectArray *rlimits;
+    jint *mount_external;
+    jstring *seinfo;
+    jstring *nice_name;
+    jintArray *is_child_zygote;
+    jstring *instruction_set;
+    jstring *app_data_dir;
+    jboolean *is_top_app;
+    jobjectArray *pkg_data_info_list;
+    jobjectArray *whitelisted_data_info_list;
+    jboolean *mount_data_dirs;
+    jboolean *mount_storage_dirs;
+};
+
+struct ServerSpecializeArgs {
+    jint *uid;
+    jint *gid;
+    jintArray *gids;
+    jint *runtime_flags;
+    jobjectArray *rlimits;
+    jint *permitted_capabilities;
+    jint *effective_capabilities;
+};
+
 } // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-    static clazz _zygisk_module_instance; \
-    extern "C" { \
-        __attribute__((visibility("default"))) void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-            _zygisk_module_instance.onLoad(api, env); \
-        } \
-        __attribute__((visibility("default"))) void zygisk_api_version(int *version) { \
-            *version = 4; \
-        } \
-    }
+static void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+    static clazz module; \
+    api->registerModule(&module); \
+} \
+extern "C" [[gnu::visibility("default")]] \
+void zygisk_module_entry_v1(zygisk::Api *api, JNIEnv *env) { \
+    zygisk_module_entry(api, env); \
+}

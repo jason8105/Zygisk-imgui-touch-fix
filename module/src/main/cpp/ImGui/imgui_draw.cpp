@@ -1,2 +1,2 @@
 #include "imgui.h"
-// Stub for compilation
+// Minimal ImGui Draw implementation
