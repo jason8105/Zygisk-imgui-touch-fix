@@ -7,13 +7,13 @@ android {
     compileSdk 34
 
     defaultConfig {
-        minSdk 26
+        minSdk 24
         targetSdk 34
         versionCode 100
         versionName "1.0.0"
 
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
         }
 
         externalNativeBuild {
@@ -40,32 +40,44 @@ android {
             version "3.22.1"
         }
     }
+
+    packagingOptions {
+        exclude '**/*.so'
+    }
 }
 
-tasks.register('zip', Zip) {
-    dependsOn 'assembleRelease'
+task packageMagiskModule(type: Zip) {
+    dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName = "zygisk-imgui-menu.zip"
-    destinationDirectory = file("$buildDir/outputs")
+    archiveFileName = "zygisk-imgui-release.zip"
+    destinationDirectory = file("${project.rootDir}/out")
 
-    from("${projectDir}/../module") {
-        include 'module.prop'
-        include 'customize.sh'
-        include 'service.sh'
+    // Copy module prop and shell scripts
+    from("${projectDir}/src/main/assets") {
+        include "module.prop"
+        include "service.sh"
+        include "post-fs-data.sh"
+        include "system/**"
     }
 
-    into('zygisk') {
-        ['arm64-v8a', 'armeabi-v7a'].each { abi ->
-            def soFiles = fileTree(dir: "$buildDir", include: "**/${abi}/libzygisk.so").files
-            if (!soFiles.isEmpty()) {
-                from(soFiles.first()) {
-                    rename 'libzygisk.so', "${abi}.so"
-                }
-            }
+    // Process and copy native binaries for all supported ABIs
+    def abis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+    abis.each { abi ->
+        def candidateFiles = fileTree(dir: "${buildDir}/intermediates", include: "**/lib/${abi}/libzygisk.so")
+                .plus(fileTree(dir: "${buildDir}/intermediates", include: "**/${abi}/libzygisk.so"))
+
+        from(candidateFiles) {
+            into "zygisk/${abi}"
+            rename { "libzygisk.so" }
+        }
+        from(candidateFiles) {
+            into "zygisk"
+            rename { "${abi}.so" }
         }
     }
 }
 
-tasks.named('assembleRelease').configure {
-    finalizedBy 'zip'
+tasks.afterEvaluate {
+    packageMagiskModule.mustRunAfter('externalNativeBuildRelease')
+    assembleRelease.finalizedBy(packageMagiskModule)
 }

@@ -1,14 +1,9 @@
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-int DobbyHook(void *function_address, void *replace_call, void **origin_call);
-
-#ifdef __cplusplus
+namespace HookUtils {
+    bool HookSymbol(const char* libName, const char* symbolName, void* hookFunc, void** origFunc);
+    void* GetModuleBase(const char* moduleName);
 }
-#endif

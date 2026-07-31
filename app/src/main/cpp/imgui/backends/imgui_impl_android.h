@@ -1,6 +1,7 @@
 #pragma once
-namespace ImGui_ImplAndroid {
-    bool Init(void* window);
-    void Shutdown();
-    void NewFrame();
-}
+#include "imgui.h"
+
+struct AInputEvent;
+bool ImGui_ImplAndroid_Init(void* window);
+int32_t ImGui_ImplAndroid_HandleInputEvent(const AInputEvent* input_event);
+void ImGui_ImplAndroid_NewFrame();

@@ -1,2 +1,2 @@
 #include "imgui.h"
-// Tables stub implementation
+// Table implementations placeholder

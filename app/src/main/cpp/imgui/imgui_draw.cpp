@@ -1,2 +1,2 @@
 #include "imgui.h"
-// Drawing pipelines stub implementation
+// Draw implementations placeholder

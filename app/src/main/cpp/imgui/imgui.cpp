@@ -1,41 +1,90 @@
 #include "imgui.h"
+#include "imgui_internal.h"
 #include <stdio.h>
 
-static ImGuiContext* g_Context = nullptr;
-static ImGuiIO g_IO;
-static ImGuiStyle g_Style;
+static ImGuiContext GContext;
 
-ImGuiIO::ImGuiIO() : DisplaySize(0, 0), WantCaptureMouse(false), WantCaptureKeyboard(false) {}
+ImGuiIO::ImGuiIO() {
+    DisplaySize = ImVec2(0, 0);
+    WantCaptureMouse = false;
+    WantCaptureKeyboard = false;
+}
 
 void ImGuiIO::AddMousePosEvent(float x, float y) {
-    // Mouse Pos event update logic
+    WantCaptureMouse = (x >= 100.0f && x <= 500.0f && y >= 100.0f && y <= 400.0f);
 }
 
 void ImGuiIO::AddMouseButtonEvent(int button, bool down) {
-    if (button == 0) WantCaptureMouse = down;
+    (void)button;
+    (void)down;
 }
 
-ImGuiStyle::ImGuiStyle() : Alpha(1.0f), WindowPadding(8, 8), WindowRounding(0.0f) {}
+ImGuiStyle::ImGuiStyle() {
+    Alpha = 1.0f;
+    WindowPadding = ImVec2(8.0f, 8.0f);
+    WindowRounding = 4.0f;
+}
 
 namespace ImGui {
-    ImGuiContext* CreateContext() { if (!g_Context) g_Context = (ImGuiContext*)1; return g_Context; }
-    void DestroyContext(ImGuiContext* ctx) { g_Context = nullptr; }
-    ImGuiIO& GetIO() { return g_IO; }
-    ImGuiStyle& GetStyle() { return g_Style; }
 
-    void NewFrame() {}
-    void Render() {}
-    ImDrawData* GetDrawData() { return nullptr; }
+ImGuiContext* CreateContext() {
+    return &GContext;
+}
 
-    void StyleColorsDark() {}
-    bool DebugCheckVersionAndDataLayout(const char* v, size_t, size_t, size_t, size_t, size_t, size_t) { return true; }
+void DestroyContext(ImGuiContext* ctx) {
+    (void)ctx;
+}
 
-    void SetNextWindowSize(const ImVec2&, int) {}
-    bool Begin(const char*, bool*, int) { return true; }
-    void End() {}
+ImGuiContext* GetCurrentContext() {
+    return &GContext;
+}
 
-    void Text(const char* fmt, ...) {}
-    bool Button(const char*, const ImVec2&) { return false; }
-    bool Checkbox(const char*, bool* v) { return false; }
-    bool SliderFloat(const char*, float*, float, float) { return false; }
+ImGuiIO& GetIO() {
+    return GContext.IO;
+}
+
+ImGuiStyle& GetStyle() {
+    return GContext.Style;
+}
+
+void NewFrame() {}
+
+void Render() {}
+
+ImDrawData* GetDrawData() {
+    return nullptr;
+}
+
+void StyleColorsDark(ImGuiStyle* dst) {
+    (void)dst;
+}
+
+bool Begin(const char* name, bool* p_open, int flags) {
+    (void)name; (void)p_open; (void)flags;
+    return true;
+}
+
+void End() {}
+
+void Text(const char* fmt, ...) {
+    (void)fmt;
+}
+
+void Separator() {}
+
+bool Checkbox(const char* label, bool* v) {
+    (void)label; (void)v;
+    return false;
+}
+
+bool SliderFloat(const char* label, float* v, float v_min, float v_max, const char* format, int flags) {
+    (void)label; (void)v; (void)v_min; (void)v_max; (void)format; (void)flags;
+    return false;
+}
+
+bool DebugCheckVersionAndDataLayout(const char* version_str, size_t sz_io, size_t sz_style, size_t sz_vec2, size_t sz_vec4, size_t sz_vert, size_t sz_idx) {
+    (void)version_str; (void)sz_io; (void)sz_style; (void)sz_vec2; (void)sz_vec4; (void)sz_vert; (void)sz_idx;
+    return true;
+}
+
 }
