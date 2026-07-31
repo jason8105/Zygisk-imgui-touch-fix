@@ -2,8 +2,9 @@
 
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
+#include <jni.h>
 
 namespace ImGuiManager {
-    void Init();
-    void Render(EGLDisplay dpy, EGLSurface surface);
+    void Init(JNIEnv* env);
+    void OnEglSwapBuffers(EGLDisplay dpy, EGLSurface surface);
 }

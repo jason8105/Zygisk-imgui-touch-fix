@@ -1,80 +1,94 @@
 #include "imgui_manager.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
+#include "touch_hook.h"
 #include <android/log.h>
+#include <dlfcn.h>
 
-#define LOG_TAG "ZygiskImGui"
+#define LOG_TAG "ImGuiManager"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-bool g_ShowMenu = true;
+typedef EGLBoolean (*t_eglSwapBuffers)(EGLDisplay dpy, EGLSurface surface);
+static t_eglSwapBuffers orig_eglSwapBuffers = nullptr;
+
 static bool g_Initialized = false;
-static bool g_DemoToggle = false;
+static int g_Width = 0;
+static int g_Height = 0;
 
-static void SetupImGuiStyle() {
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 8.0f;
-    style.FrameRounding = 5.0f;
-    style.PopupRounding = 5.0f;
-    style.ScrollbarRounding = 5.0f;
-    style.GrabRounding = 5.0f;
-    style.ScaleAllSizes(2.5f);
-}
+extern "C" extern void HookSymbol(void* target, void* replace, void** origin);
 
-void ImGuiManager::Init() {
-    if (g_Initialized) return;
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-
-    io.DisplaySize = ImVec2(1920.0f, 1080.0f);
-    io.IniFilename = nullptr;
-
-    SetupImGuiStyle();
-    ImGui_ImplOpenGL3_Init("#version 300 es");
-
-    g_Initialized = true;
-    LOGI("ImGui Context initialized.");
-}
-
-void ImGuiManager::Render(EGLDisplay dpy, EGLSurface surface) {
+static EGLBoolean Hooked_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
     if (!g_Initialized) {
-        Init();
-    }
+        eglQuerySurface(dpy, surface, EGL_WIDTH, &g_Width);
+        eglQuerySurface(dpy, surface, EGL_HEIGHT, &g_Height);
 
-    EGLint width = 0, height = 0;
-    eglQuerySurface(dpy, surface, EGL_WIDTH, &width);
-    eglQuerySurface(dpy, surface, EGL_HEIGHT, &height);
+        if (g_Width > 0 && g_Height > 0) {
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.DisplaySize = ImVec2((float)g_Width, (float)g_Height);
 
-    ImGuiIO& io = ImGui::GetIO();
-    if (width > 0 && height > 0) {
-        io.DisplaySize = ImVec2((float)width, (float)height);
-    }
+            ImGui::StyleColorsDark();
+            ImGui_ImplOpenGL3_Init("#version 300 es");
 
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui::NewFrame();
-
-    if (g_ShowMenu) {
-        ImGui::SetNextWindowSize(ImVec2(500.0f, 350.0f), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Universal ImGui Menu", &g_ShowMenu);
-        ImGui::Text("Universal Touch-Fixed ImGui Menu");
-        ImGui::Text("Supports Unity, Unreal Engine & Native C++");
-        ImGui::Separator();
-        
-        ImGui::Checkbox("Demo Toggle", &g_DemoToggle);
-        if (g_DemoToggle) {
-            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Feature Activated!");
+            g_Initialized = true;
+            LOGI("ImGui initialized: %dx%d", g_Width, g_Height);
         }
+    }
 
+    if (g_Initialized) {
+        eglQuerySurface(dpy, surface, EGL_WIDTH, &g_Width);
+        eglQuerySurface(dpy, surface, EGL_HEIGHT, &g_Height);
+        ImGui::GetIO().DisplaySize = ImVec2((float)g_Width, (float)g_Height);
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui::NewFrame();
+
+        ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
+
+        ImGui::Begin("Universal Game Engine ImGui Menu");
+        ImGui::Text("Engine: Universal (Unity / Unreal / Native)");
+        ImGui::Text("Touch Status: Fixed & Capturing");
         ImGui::Separator();
-        if (ImGui::Button("Close Menu", ImVec2(150.0f, 40.0f))) {
-            g_ShowMenu = false;
+
+        static bool showDemo = false;
+        ImGui::Checkbox("Show Demo Window", &showDemo);
+
+        if (ImGui::Button("Test Touch Capture")) {
+            LOGI("ImGui Button Clicked!");
         }
 
         ImGui::End();
+
+        if (showDemo) {
+            ImGui::ShowDemoWindow(&showDemo);
+        }
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
 
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    return orig_eglSwapBuffers(dpy, surface);
 }
+
+namespace ImGuiManager {
+
+void Init(JNIEnv* env) {
+    LOGI("Initializing ImGui eglSwapBuffers Hook...");
+    
+    void* eglHandle = dlopen("libEGL.so", RTLD_NOW | RTLD_GLOBAL);
+    if (eglHandle) {
+        void* swapBuffers = dlsym(eglHandle, "eglSwapBuffers");
+        if (swapBuffers) {
+            HookSymbol(swapBuffers, (void*)Hooked_eglSwapBuffers, (void**)&orig_eglSwapBuffers);
+            LOGI("eglSwapBuffers hooked successfully");
+        }
+    }
+}
+
+void OnEglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
+    Hooked_eglSwapBuffers(dpy, surface);
+}
+
+} // namespace ImGuiManager

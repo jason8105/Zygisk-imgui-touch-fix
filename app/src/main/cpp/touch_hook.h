@@ -1,10 +1,10 @@
 #pragma once
 
 #include <android/input.h>
-#include <android/native_activity.h>
+#include <jni.h>
 
 namespace TouchHook {
-    void Init();
-    void HandleInputEvent(AInputQueue* queue, AInputEvent* event);
-    bool ShouldConsumeCurrentEvent();
+    void Init(JNIEnv *env);
+    void HandleMotionEvent(int action, float x, float y);
+    bool ShouldConsumeTouch();
 }
