@@ -3,19 +3,28 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui'
-    compileSdk 34
+    compileSdk 33
 
     defaultConfig {
         minSdk 21
-        targetSdk 34
+        targetSdk 33
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fdata-sections -ffunction-sections"
+                cppFlags "-std=c++17 -O3 -fvisibility=hidden -Wall"
                 arguments "-DANDROID_STL=c++_static"
-                abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
         }
     }
 
@@ -26,47 +35,40 @@ android {
         }
     }
 
-    buildTypes {
-        release {
-            minifyEnabled false
-        }
-    }
-
-    packaging {
-        jniLibs {
-            excludes += ['**/*']
-        }
+    packagingOptions {
+        exclude '**/libzygisk.so'
     }
 }
 
-tasks.register('zip', Zip) {
-    dependsOn 'externalNativeBuildRelease'
+afterEvaluate {
+    def zipTask = tasks.register('zip', Zip) {
+        dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName.set("zygisk-imgui-touchfix.zip")
-    destinationDirectory.set(file("${rootProject.buildDir}/outputs"))
+        archiveFileName = "Zygisk-ImGui-Menu-v1.0.0.zip"
+        destinationDirectory = file("$rootDir/out")
 
-    // Copy module scripts & metadata
-    from("${projectDir}/src/main/module")
+        from("$rootDir/template") {
+            include "module.prop"
+            include "customize.sh"
+            include "service.sh"
+        }
 
-    // Package libzygisk.so for each target ABI
-    def abis = ["arm64-v8a", "armeabi-v7a", "x86", "x86_64"]
-    abis.each { abi ->
-        into("zygisk/${abi}") {
-            from("${projectDir}/src/main/module/zygisk/${abi}")
-            from("${buildDir}/intermediates/cxx/Release") {
-                include "**/obj/${abi}/libzygisk.so"
-                eachFile { path = "libzygisk.so" }
+        ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].each { abi ->
+            def abiLibDir = file("$buildDir/outputs/zygisk_libs/$abi")
+            
+            from(abiLibDir) {
+                include "libzygisk.so"
+                into "zygisk/$abi"
             }
-            from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/${abi}")
-            from("${buildDir}/intermediates/merged_native_libs/release/out/lib/${abi}")
-            from("${buildDir}/intermediates/cmake/release/obj/${abi}")
-            from("${buildDir}/zygisk_libs/${abi}")
-            include "libzygisk.so"
-            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+            from(abiLibDir) {
+                include "libzygisk.so"
+                into "zygisk"
+                rename "libzygisk.so", "${abi}.so"
+            }
         }
     }
-}
 
-tasks.named('assemble').configure {
-    finalizedBy 'zip'
+    tasks.named('assemble').configure {
+        finalizedBy(zipTask)
+    }
 }

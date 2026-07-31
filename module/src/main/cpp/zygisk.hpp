@@ -6,31 +6,56 @@
 
 namespace zygisk {
 
-struct Api;
-struct AppSpecializeArgs;
-struct ServerSpecializeArgs;
+struct ApiTable;
+class AppSpecializeArgs;
+class ServerSpecializeArgs;
+
+enum Option : uint32_t {
+    FORCE_DENYLIST_UNMOUNT = 1 << 0,
+    DLCLOSE_MODULE_LIBRARY = 1 << 1,
+};
 
 class ModuleBase {
 public:
-    virtual void onLoad(Api *api, JNIEnv *env) {}
+    virtual void onLoad(ApiTable *table, JNIEnv *env) {}
     virtual void preAppSpecialize(AppSpecializeArgs *args) {}
     virtual void postAppSpecialize(const AppSpecializeArgs *args) {}
     virtual void preServerSpecialize(ServerSpecializeArgs *args) {}
     virtual void postServerSpecialize(const ServerSpecializeArgs *args) {}
 };
 
-enum Option : uint32_t {
-    FORCE_DENYLIST_UNMOUNT = 0,
-    DLCLOSE_MODULE_LIBRARY = 1,
+struct ApiTable {
+    void *impl;
+    bool (*registerModule)(ApiTable *, ModuleBase *);
+    void (*setOption)(ApiTable *, Option);
+    int (*getModuleDir)(ApiTable *);
+    bool (*exemptAppProcess)(ApiTable *);
+    int (*connectCompanion)(ApiTable *);
 };
 
-struct Api {
-    bool (*registerModule)(ModuleBase *module);
-    int (*connectCompanion)();
-    void (*setOption)(Option opt);
+class Api {
+    ApiTable *tbl;
+public:
+    Api(ApiTable *t) : tbl(t) {}
+    bool registerModule(ModuleBase *module) {
+        return tbl && tbl->registerModule ? tbl->registerModule(tbl, module) : false;
+    }
+    void setOption(Option opt) {
+        if (tbl && tbl->setOption) tbl->setOption(tbl, opt);
+    }
+    int getModuleDir() {
+        return (tbl && tbl->getModuleDir) ? tbl->getModuleDir(tbl) : -1;
+    }
+    bool exemptAppProcess() {
+        return (tbl && tbl->exemptAppProcess) ? tbl->exemptAppProcess(tbl) : false;
+    }
+    int connectCompanion() {
+        return (tbl && tbl->connectCompanion) ? tbl->connectCompanion(tbl) : -1;
+    }
 };
 
-struct AppSpecializeArgs {
+class AppSpecializeArgs {
+public:
     jint *uid;
     jint *gid;
     jintArray *gids;
@@ -49,7 +74,8 @@ struct AppSpecializeArgs {
     jboolean *mount_storage_dirs;
 };
 
-struct ServerSpecializeArgs {
+class ServerSpecializeArgs {
+public:
     jint *uid;
     jint *gid;
     jintArray *gids;
@@ -62,11 +88,9 @@ struct ServerSpecializeArgs {
 } // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-static void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-    static clazz module; \
-    api->registerModule(&module); \
-} \
 extern "C" [[gnu::visibility("default")]] \
-void zygisk_module_entry_v1(zygisk::Api *api, JNIEnv *env) { \
-    zygisk_module_entry(api, env); \
+void zygisk_module_entry(zygisk::ApiTable *table, JNIEnv *env) { \
+    zygisk::Api api{table}; \
+    static clazz module; \
+    api.registerModule(&module); \
 }
