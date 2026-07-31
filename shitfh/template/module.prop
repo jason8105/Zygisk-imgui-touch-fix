@@ -1,0 +1,7 @@
+id=zygisk_universal_imgui
+name=Zygisk Universal ImGui Menu
+version=v1.0.0
+versionCode=100
+author=Elite Developer
+description=A universal ImGui menu overlay for Android games with a robust touch hook.
+minMagisk=24000

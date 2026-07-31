@@ -3,20 +3,23 @@ plugins {
 }
 
 android {
-    compileSdk 33
-    namespace 'com.universal.zygisk.imgui'
+    namespace 'com.zygisk.imgui'
+    compileSdk 34
 
     defaultConfig {
-        minSdk 21
-        targetSdk 33
+        applicationId "com.zygisk.imgui"
+        minSdk 24
+        targetSdk 34
         versionCode 100
         versionName "1.0.0"
 
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden"
-                arguments "-DANDROID_STL=c++_static"
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+                cppFlags "-std=c++17 -O3 -frtti -fexceptions"
+                arguments "-DANDROID_STL=c++_shared"
             }
         }
     }
@@ -24,63 +27,46 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.18.1+"
+            version "3.18.1"
         }
-    }
-
-    packagingOptions {
-        exclude '**/*'
     }
 }
 
-tasks.register('packageMagiskModule', Zip) {
-    dependsOn 'externalNativeBuildRelease'
-
-    archiveFileName = "zygisk-imgui-menu.zip"
-    destinationDirectory = file("${buildDir}/outputs")
-
-    // Root module metadata files
-    from("${project.rootDir}/module") {
-        include 'module.prop'
-        include 'customize.sh'
-    }
-
-    doFirst {
-        def stagingDir = file("${buildDir}/tmp/zip_staging")
-        stagingDir.mkdirs()
-
-        ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].each { abi ->
-            def filesFound = fileTree(dir: buildDir, include: "**/libzygisk.so").filter { f ->
-                f.path.contains(abi)
-            }
-            if (!filesFound.isEmpty()) {
-                def soFile = filesFound.first()
-                println "Packing Zygisk binary for ABI [${abi}]: ${soFile.path}"
-
-                // Copy to zygisk/<abi>/libzygisk.so
-                copy {
-                    from soFile
-                    into "${buildDir}/tmp/zip_staging/zygisk/${abi}"
-                }
-                // Copy to zygisk/<abi>.so for backwards compatibility
-                copy {
-                    from soFile
-                    into "${buildDir}/tmp/zip_staging/zygisk"
-                    rename "libzygisk.so", "${abi}.so"
-                }
-            }
-        }
-    }
-
-    from("${buildDir}/tmp/zip_staging")
+dependencies {
+    // No extra java dependencies needed
 }
 
-tasks.matching { it.name == 'assembleRelease' }.configureEach {
-    finalizedBy 'packageMagiskModule'
+// Magisk module packager task
+task zipModule(type: Zip) {
+    archiveFileName = "zygisk-universal-imgui.zip"
+    destinationDirectory = file("$rootDir/out")
+
+    // Copy template module prop and files
+    from("$rootDir/template") {
+        include "**/*"
+    }
+
+    // Map each compiled .so to the Zygisk directories
+    def buildType = "release"
+    def nativeOutDir = file("$buildDir/intermediates/stripped_native_libs/${buildType}/out/lib")
+
+    // Wait for the build task to run first
+    dependsOn "assembleRelease"
+
+    into("zygisk") {
+        from(nativeOutDir) {
+            include "**/libzygisk.so"
+        }
+    }
+}
+
+// Always clean output directory before zip
+zipModule.doFirst {
+    file("$rootDir/out").mkdirs()
 }
