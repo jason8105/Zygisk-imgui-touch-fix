@@ -1,0 +1,7 @@
+id=zygisk_imgui_menu
+name=Universal Zygisk ImGui Menu
+version=v1.0.0
+versionCode=100
+author=Engineer
+description=Universal ImGui Menu module with touch fixed input support across all game engines.
+minMagisk=24000

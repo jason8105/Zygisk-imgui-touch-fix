@@ -1,24 +1,27 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "com.example.zygisk_imgui"
+    namespace = "com.zygisk.imgui"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.zygisk_imgui"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 100
+        versionName = "1.0.0"
+
+        ndk {
+            abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
+        }
 
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden")
+                cppFlags("-std=c++17", "-frtti", "-fexceptions", "-Wall")
                 arguments("-DANDROID_STL=c++_static")
-                abiFilters("arm64-v8a", "armeabi-v7a")
             }
         }
     }
@@ -28,36 +31,45 @@ android {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        debug {
+            isMinifyEnabled = false
+        }
     }
-    
+
     externalNativeBuild {
         cmake {
-            path = file("src/main/jni/CMakeLists.txt")
+            path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
     }
 }
 
-// Custom task to package the Magisk Module
+// Custom Gradle task to pack compiled binaries into standard Magisk module zip layout
 tasks.register<Zip>("packageMagiskModule") {
     dependsOn("externalNativeBuildRelease")
-    
-    archiveFileName.set("Zygisk-ImGui-Universal.zip")
-    destinationDirectory.set(layout.buildDirectory.dir("outputs/magisk"))
 
-    // 1. Include module metadata
-    from("src/main/root") {
-        include("module.prop")
-        include("post-fs-data.sh")
-        include("service.sh")
-    }
+    archiveFileName.set("zygisk-imgui-menu.zip")
+    destinationDirectory.set(file("${rootProject.projectDir}/out"))
 
-    // 2. Include the compiled Zygisk libraries in the correct structure
-    val abiMap = mapOf("arm64-v8a" to "arm64-v8a", "armeabi-v7a" to "armeabi-v7a")
-    abiMap.forEach { (abi, folder) ->
-        from(layout.buildDirectory.dir("intermediates/cmake/release/obj/$abi")) {
-            include("libzygisk.so")
-            into("zygisk/$folder")
+    // Add module metadata template files
+    from(file("${rootProject.projectDir}/template"))
+
+    // Copy compiled native library into zygisk/<abi>/libzygisk.so
+    val abis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+    abis.forEach { abi ->
+        val cmakeOutDir = file("${rootProject.projectDir}/out/zygisk/$abi")
+        if (cmakeOutDir.exists()) {
+            from(cmakeOutDir) {
+                into("zygisk/$abi")
+            }
         }
     }
+
+    doFirst {
+        file("${rootProject.projectDir}/out").mkdirs()
+    }
+}
+
+tasks.named("assembleRelease") {
+    finalizedBy("packageMagiskModule")
 }

@@ -1,14 +1,17 @@
-cmake_minimum_required(VERSION 3.22.1)
-project("zygisk")
+cmake_minimum_required(VERSION 3.18.1)
+project("zygisk_imgui" CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../out/zygisk/${ANDROID_ABI}")
+set(TEMPLATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../template/zygisk/${ANDROID_ABI}")
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}")
+
 add_library(zygisk SHARED
     main.cpp
-    hook_utils.cpp
-    render_hook.cpp
-    touch_hook.cpp
+    hook.cpp
     imgui/imgui.cpp
     imgui/imgui_draw.cpp
     imgui/imgui_widgets.cpp
@@ -25,10 +28,15 @@ target_include_directories(zygisk PRIVATE
 )
 
 target_link_libraries(zygisk
-    log
     android
     EGL
-    GLESv2
     GLESv3
-    dl
+    log
+)
+
+add_custom_command(TARGET zygisk POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${TEMPLATE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:zygisk>" "${TEMPLATE_DIR}/libzygisk.so"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:zygisk>" "${OUTPUT_DIR}/libzygisk.so"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:zygisk>" "${OUTPUT_DIR}/../${ANDROID_ABI}.so"
 )

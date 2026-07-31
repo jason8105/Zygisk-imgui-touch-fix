@@ -1,0 +1,15 @@
+#!/sbin/sh
+##########################################################################################
+# Magisk Module Installer Script
+##########################################################################################
+
+[ -z "$ZIPFILE" ] && ZIPFILE="$2"
+[ -z "$OOTFD" ] && OOTFD="$3"
+
+if [ -f /data/adb/magisk/util_functions.sh ]; then
+  . /data/adb/magisk/util_functions.sh
+  install_module
+else
+  echo "! Magisk environment not detected"
+  exit 1
+fi
