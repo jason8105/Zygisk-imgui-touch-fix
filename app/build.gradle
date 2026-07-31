@@ -3,21 +3,23 @@ plugins {
 }
 
 android {
-    namespace 'com.universal.zygisk.imgui'
+    namespace 'com.zygisk.imgui'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.universal.zygisk.imgui"
-        minSdk 26
+        minSdk 24
         targetSdk 34
-        versionCode 1000
+        versionCode 100
         versionName "1.0.0"
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+        }
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden -fdata-sections -ffunction-sections"
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden -O3"
                 arguments "-DANDROID_STL=c++_static"
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
             }
         }
     }
@@ -26,9 +28,18 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            externalNativeBuild {
+                cmake {
+                    arguments "-DCMAKE_BUILD_TYPE=Release"
+                }
+            }
         }
         debug {
-            minifyEnabled false
+            externalNativeBuild {
+                cmake {
+                    arguments "-DCMAKE_BUILD_TYPE=Debug"
+                }
+            }
         }
     }
 
@@ -40,33 +51,46 @@ android {
     }
 
     packagingOptions {
-        exclude '**/*.so'
+        exclude '**/*'
     }
 }
 
-task packageMagiskModule(type: Zip) {
-    dependsOn 'externalNativeBuildRelease'
+android.applicationVariants.all { variant ->
+    def variantName = variant.name.capitalize()
+    
+    def zipTask = tasks.register("packageMagiskModule${variantName}", Zip) {
+        dependsOn "externalNativeBuild${variantName}"
+        
+        archiveFileName = "Zygisk-ImGui-Universal-${variant.name}.zip"
+        destinationDirectory = file("${project.buildDir}/outputs/magisk")
 
-    archiveFileName = "Zygisk_ImGui_Universal_v1.0.0.zip"
-    destinationDirectory = file("$buildDir/outputs/magisk")
+        // Pack module root structure
+        from("${project.rootDir}/module") {
+            include "module.prop"
+            include "customize.sh"
+            include "service.sh"
+            include "system/**"
+        }
 
-    // Root module files (module.prop, customize.sh, service.sh)
-    from("${projectDir}/src/main/module") {
-        into ''
+        // Pack native libraries under zygisk/<abi>/libzygisk.so
+        ["arm64-v8a", "armeabi-v7a", "x86", "x86_64"].each { abi ->
+            into("zygisk/${abi}") {
+                from({
+                    def possiblePaths = [
+                        "${project.buildDir}/intermediates/stripped_native_libs/${variant.name}/strip${variantName}DebugSymbols/out/lib/${abi}",
+                        "${project.buildDir}/intermediates/stripped_native_libs/${variant.name}/out/lib/${abi}",
+                        "${project.buildDir}/intermediates/merged_native_libs/${variant.name}/out/lib/${abi}",
+                        "${project.buildDir}/intermediates/cmake/${variant.name}/obj/${abi}"
+                    ]
+                    def found = possiblePaths.find { file("${it}/libzygisk.so").exists() }
+                    return found ? file(found) : file("${project.buildDir}/intermediates/cmake/${variant.name}/obj/${abi}")
+                })
+                include "libzygisk.so"
+            }
+        }
     }
 
-    // Include output zygisk native shared libraries under zygisk/<abi>/libzygisk.so
-    from("${projectDir}/src/main/module_out/zygisk") {
-        into 'zygisk'
-    }
-
-    doFirst {
-        file("$buildDir/outputs/magisk").mkdirs()
-    }
-}
-
-tasks.whenTaskAdded { task ->
-    if (task.name == 'assembleRelease' || task.name == 'assemble') {
-        task.finalizedBy packageMagiskModule
+    tasks.named("assemble${variantName}").configure {
+        finalizedBy(zipTask)
     }
 }

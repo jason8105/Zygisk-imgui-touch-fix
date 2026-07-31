@@ -1,53 +1,59 @@
 #pragma once
 
 #include <jni.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <unistd.h>
 
 namespace zygisk {
 
-class Api;
-class AppSpecimen;
-class ServerSpecimen;
+struct AppSpecializeArgs {
+    uid_t uid;
+    gid_t gid;
+    jintArray gids;
+    jint runtime_flags;
+    jobjectArray mount_external;
+    jstring se_info;
+    jstring nice_name;
+    jintArray is_child_zygote;
+    jstring instruction_set;
+    jstring app_data_dir;
+};
 
-class ModuleBase {
-public:
-    virtual void onLoad(Api *api, JNIEnv *env) {}
-    virtual void preAppSpecialize(AppSpecimen *specimen) {}
-    virtual void postAppSpecialize(const AppSpecimen *specimen) {}
-    virtual void preServerSpecialize(ServerSpecimen *specimen) {}
-    virtual void postServerSpecialize(const ServerSpecimen *specimen) {}
+struct ServerSpecializeArgs {
+    uid_t uid;
+    gid_t gid;
+    jintArray gids;
+    jint runtime_flags;
+    jlong permitted_capabilities;
+    jlong effective_capabilities;
 };
 
 enum Option : uint32_t {
     FORCE_DENYLIST_UNMOUNT = 0,
-    DLCLOSE_MODULE_LIBRARY = 1,
+    DLCLOSE_MODULE_AT_UNLOAD = 1,
 };
 
 class Api {
 public:
-    virtual int connectCompanion() = 0;
-    virtual void setOption(Option option) = 0;
-    virtual int getModuleDir() = 0;
-    virtual void exemptFd(int fd) = 0;
+    virtual void connectCompanion() = 0;
+    virtual int getCompanionFd() = 0;
+    virtual bool setOption(Option opt) = 0;
 };
 
-class AppSpecimen {
+class ModuleBase {
 public:
-    virtual JNIEnv *getJNIEnv() const = 0;
-    virtual const char *getNiceName() const = 0;
-    virtual const char *getProcessName() const = 0;
+    virtual void onLoad(Api *api, JNIEnv *env) {}
+    virtual void preAppSpecialize(AppSpecializeArgs *args) {}
+    virtual void postAppSpecialize(const AppSpecializeArgs *args) {}
+    virtual void preServerSpecialize(ServerSpecializeArgs *args) {}
+    virtual void postServerSpecialize(const ServerSpecializeArgs *args) {}
 };
-
-class ServerSpecimen {
-public:
-    virtual JNIEnv *getJNIEnv() const = 0;
-};
-
-} // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-extern "C" [[gnu::visibility("default")]] \
-void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-    static clazz module; \
-    module.onLoad(api, env); \
-}
+    extern "C" [[gnu::visibility("default")]] void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+        static clazz module; \
+        module.onLoad(api, env); \
+    }
+
+} // namespace zygisk
