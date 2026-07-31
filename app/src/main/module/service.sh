@@ -1,3 +1,2 @@
 #!/system/bin/sh
-MODDIR=${0%/*}
-# Module late-start service initialization
+# Magisk Zygisk Module Service Script

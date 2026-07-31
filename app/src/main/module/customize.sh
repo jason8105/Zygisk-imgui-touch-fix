@@ -1,15 +1,17 @@
-#!/system/bin/sh
 SKIPUNZIP=0
 
-ui_print "***********************************************"
-ui_print "*   Universal ImGui Menu Zygisk Module        *"
-ui_print "*   Magisk v24 - v26 Compatible               *"
-ui_print "***********************************************"
+ui_print "- Installing Universal Zygisk ImGui Module..."
 
-if [ ! -d "$MODPATH/zygisk" ]; then
-    ui_print "! Failed: Zygisk library folder missing in module zip"
-    abort
+if [ "$MAGISK_VER_CODE" -lt 24000 ]; then
+  ui_print "! Magisk version 24.0+ is required"
+  abort "! Zygisk is required for this module"
 fi
 
-ui_print "- Architecture detected: $ARCH"
-ui_print "- Installation successful!"
+if [ "$ZYGISK_ENABLED" != "1" ]; then
+  ui_print "! Zygisk is not enabled in Magisk settings"
+  ui_print "! Please enable Zygisk and reboot before installing"
+  abort "! Zygisk must be enabled"
+fi
+
+ui_print "- Target Architecture: $ARCH"
+ui_print "- Module installation successfully initialized!"
