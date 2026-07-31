@@ -1,7 +1,13 @@
-plugins {
-    id("com.android.application") version "8.2.2" apply false
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.2.2")
+    }
 }
 
-tasks.register("clean", Delete::class) {
+tasks.register<Delete>("clean") {
     delete(rootProject.buildDir)
 }

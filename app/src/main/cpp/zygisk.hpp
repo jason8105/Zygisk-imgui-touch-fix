@@ -1,45 +1,36 @@
 #pragma once
 
 #include <jni.h>
-#include <stddef.h>
 #include <stdint.h>
-#include <unistd.h>
 
 namespace zygisk {
 
 struct AppSpecializeArgs {
-    uid_t uid;
-    gid_t gid;
-    jintArray gids;
-    jint runtime_flags;
-    jobjectArray mount_external;
-    jstring se_info;
-    jstring nice_name;
-    jintArray is_child_zygote;
-    jstring instruction_set;
-    jstring app_data_dir;
+    jint *uid;
+    jint *gid;
+    jintArray *gids;
+    jint *runtime_flags;
+    jobjectArray *rlimits;
+    jint *mount_external;
+    jstring *se_info;
+    jstring *nice_name;
+    jintArray *is_child_zygote;
+    jstring *instruction_set;
+    jstring *app_data_dir;
 };
 
 struct ServerSpecializeArgs {
-    uid_t uid;
-    gid_t gid;
-    jintArray gids;
-    jint runtime_flags;
-    jlong permitted_capabilities;
-    jlong effective_capabilities;
+    jint *uid;
+    jint *gid;
+    jintArray *gids;
+    jint *runtime_flags;
+    jobjectArray *rlimits;
+    jlong *permitted_capabilities;
+    jlong *effective_capabilities;
 };
 
-enum Option : uint32_t {
-    FORCE_DENYLIST_UNMOUNT = 0,
-    DLCLOSE_MODULE_AT_UNLOAD = 1,
-};
-
-class Api {
-public:
-    virtual void connectCompanion() = 0;
-    virtual int getCompanionFd() = 0;
-    virtual bool setOption(Option opt) = 0;
-};
+class OptionSet;
+class Api;
 
 class ModuleBase {
 public:
@@ -50,10 +41,24 @@ public:
     virtual void postServerSpecialize(const ServerSpecializeArgs *args) {}
 };
 
-#define REGISTER_ZYGISK_MODULE(clazz) \
-    extern "C" [[gnu::visibility("default")]] void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-        static clazz module; \
-        module.onLoad(api, env); \
-    }
+class Api {
+public:
+    virtual bool registerModule(ModuleBase *module) = 0;
+    virtual int getModuleFlags() = 0;
+    virtual void setOption(OptionSet opt) = 0;
+    virtual int getApiVersion() = 0;
+    virtual int connectCompanion() = 0;
+};
 
 } // namespace zygisk
+
+#define REGISTER_ZYGISK_MODULE(clazz) \
+static void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+    static clazz module; \
+    api->registerModule(&module); \
+    module.onLoad(api, env); \
+} \
+extern "C" __attribute__((visibility("default"))) \
+void zygisk_module_entry_v1(zygisk::Api *api, JNIEnv *env) { \
+    zygisk_module_entry(api, env); \
+}

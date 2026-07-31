@@ -1,14 +1,13 @@
-import java.io.File
-
 plugins {
     id("com.android.application")
 }
 
 android {
-    namespace = "com.zygisk.imgui"
+    namespace = "com.zygisk.menu"
     compileSdk = 34
 
     defaultConfig {
+        applicationId = "com.zygisk.menu"
         minSdk = 24
         targetSdk = 34
         versionCode = 100
@@ -20,7 +19,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17", "-frtti", "-fexceptions", "-Wall")
+                cppFlags("-std=c++17 -frtti -fexceptions")
                 arguments("-DANDROID_STL=c++_static")
             }
         }
@@ -30,9 +29,6 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
-        debug {
-            isMinifyEnabled = false
         }
     }
 
@@ -44,32 +40,37 @@ android {
     }
 }
 
-// Custom Gradle task to pack compiled binaries into standard Magisk module zip layout
 tasks.register<Zip>("packageMagiskModule") {
     dependsOn("externalNativeBuildRelease")
 
-    archiveFileName.set("zygisk-imgui-menu.zip")
-    destinationDirectory.set(file("${rootProject.projectDir}/out"))
+    archiveFileName.set("zygisk-module.zip")
+    destinationDirectory.set(file("${project.rootDir}/out"))
 
-    // Add module metadata template files
-    from(file("${rootProject.projectDir}/template"))
+    // Base module files
+    from("${project.rootDir}/module") {
+        include("module.prop", "customize.sh", "service.sh", "system/**", "sepolicy.rule")
+    }
 
-    // Copy compiled native library into zygisk/<abi>/libzygisk.so
-    val abis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-    abis.forEach { abi ->
-        val cmakeOutDir = file("${rootProject.projectDir}/out/zygisk/$abi")
-        if (cmakeOutDir.exists()) {
-            from(cmakeOutDir) {
-                into("zygisk/$abi")
+    // Pack compiled NDK binaries into zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
+    val abiList = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+    for (abi in abiList) {
+        val strippedLib = file("${project.buildDir}/intermediates/stripped_native_libs/release/out/lib/$abi/libzygisk.so")
+        val mergedLib = file("${project.buildDir}/intermediates/merged_native_libs/release/out/lib/$abi/libzygisk.so")
+        val cmakeLib = file("${project.buildDir}/intermediates/cmake/release/obj/$abi/libzygisk.so")
+
+        into("zygisk/$abi") {
+            from(strippedLib, mergedLib, cmakeLib) {
+                rename { "libzygisk.so" }
+            }
+        }
+        into("zygisk") {
+            from(strippedLib, mergedLib, cmakeLib) {
+                rename { "$abi.so" }
             }
         }
     }
-
-    doFirst {
-        file("${rootProject.projectDir}/out").mkdirs()
-    }
 }
 
-tasks.named("assembleRelease") {
+tasks.named("assemble") {
     finalizedBy("packageMagiskModule")
 }

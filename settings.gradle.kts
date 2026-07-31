@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ZygiskImGuiMenu"
+rootProject.name = "ZygiskImGui"
 include(":app")
