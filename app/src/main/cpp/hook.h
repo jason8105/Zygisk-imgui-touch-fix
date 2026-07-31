@@ -1,18 +1,8 @@
-#ifndef HOOK_H
-#define HOOK_H
+#pragma once
 
-#include <stdint.h>
 #include <stddef.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-bool HookFunction(void* target, void* replace, void** orig);
-bool HookSymbol(const char* library_name, const char* symbol_name, void* replace, void** orig);
-
-#ifdef __cplusplus
+namespace Hook {
+    void InitHooks(void* swapBuffersHook, void** origSwapBuffers);
+    void PLTHook(const char* libName, const char* symName, void* newFunc, void** oldFunc);
 }
-#endif
-
-#endif // HOOK_H

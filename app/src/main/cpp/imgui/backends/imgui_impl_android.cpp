@@ -1,16 +1,15 @@
 #include "imgui_impl_android.h"
-#include "touch.h"
+#include "imgui.h"
 
-bool ImGui_ImplAndroid_Init(void* window) {
+bool ImGui_ImplAndroid_Init(ANativeWindow* window) {
     (void)window;
     return true;
 }
 
 int32_t ImGui_ImplAndroid_HandleInputEvent(const AInputEvent* input_event) {
-    if (UniversalTouch::ProcessInputEvent(const_cast<AInputEvent*>(input_event))) {
-        return 1;
-    }
+    (void)input_event;
     return 0;
 }
 
+void ImGui_ImplAndroid_Shutdown() {}
 void ImGui_ImplAndroid_NewFrame() {}

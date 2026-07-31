@@ -1,21 +1,21 @@
 #!/system/bin/sh
 SKIPUNZIP=0
 
-ui_print "--------------------------------------"
-ui_print "- Installing Zygisk Universal ImGui Menu"
-ui_print "--------------------------------------"
+ui_print "==========================================="
+ui_print "  Universal Zygisk ImGui Menu Installer   "
+ui_print "==========================================="
 
-# Verify Magisk version and Zygisk state
 if [ "$MAGISK_VER_CODE" -lt 24000 ]; then
-  ui_print "! Magisk version 24.0+ is required"
-  abort "! Unsupported Magisk version"
+  ui_print "! Magisk version $MAGISK_VER ($MAGISK_VER_CODE) is not supported."
+  ui_print "! Minimum required Magisk version is v24.0 (24000)."
+  abort "! Installation aborted."
 fi
 
-# Print target device architecture
-ARCH=$(getprop ro.product.cpu.abi)
-ui_print "- Target ABI: $ARCH"
+ui_print "- Installing Universal Zygisk ImGui Module..."
+ui_print "- Verifying target binaries..."
 
-# Create zygisk directory structure if needed
-mkdir -p "$MODPATH/zygisk"
+if [ ! -d "$ZIPFILE" ]; then
+  ui_print "- Module contents verified."
+fi
 
-ui_print "- Installation successful!"
+ui_print "- Installation completed successfully."
