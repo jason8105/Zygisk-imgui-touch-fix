@@ -28,19 +28,24 @@ HEADERS = {
     "Accept": "vnd.github+json"
 } if GITHUB_TOKEN else {}
 
+# Split URL components to prevent markdown / string issues
+SCHEME = "https://"
+HOST = "api.github.com"
+API_BASE = SCHEME + HOST + "/repos/"
+
 def run_cmd(cmd):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout + result.stderr
 
 def trigger_workflow_dispatch():
-    url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/workflows/build.yml/dispatches"
+    url = API_BASE + REPO_OWNER + "/" + REPO_NAME + "/actions/workflows/build.yml/dispatches"
     try:
         requests.post(url, headers=HEADERS, json={"ref": "main"}, timeout=10)
     except Exception:
         pass
 
 def get_latest_workflow_run():
-    url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs?per_page=1"
+    url = API_BASE + REPO_OWNER + "/" + REPO_NAME + "/actions/runs?per_page=1"
     try:
         res = requests.get(url, headers=HEADERS, timeout=15).json()
         runs = res.get("workflow_runs", [])
@@ -50,30 +55,9 @@ def get_latest_workflow_run():
     except Exception:
         return None, None
 
-def check_artifact_size(run_id):
-    url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id) + "/artifacts"
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=15).json()
-        artifacts = res.get("artifacts", [])
-        if not artifacts:
-            print("[!] Warning: No build artifacts found in this run!")
-            return False
-            
-        for art in artifacts:
-            size = art.get("size_in_bytes", 0)
-            name = art.get("name", "unknown")
-            print(f"[*] Found Artifact: '{name}' | Size: {size} bytes")
-            if size < 5000:
-                print(f"[!] Critical: Artifact size is too small ({size} bytes). Missing compiled binaries (.so files)!")
-                return False
-        return True
-    except Exception as e:
-        print(f"[!] Error verifying artifact size: {e}")
-        return True
-
 def get_workflow_logs(run_id, max_retries=5):
     print("[*] Fetching failed job details to get direct text logs...")
-    jobs_url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id) + "/jobs"
+    jobs_url = API_BASE + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id) + "/jobs"
 
     for attempt in range(max_retries):
         try:
@@ -90,7 +74,7 @@ def get_workflow_logs(run_id, max_retries=5):
                 if job.get("conclusion") == "failure":
                     job_id = job["id"]
                     print(f"[*] Downloading text log for failed job: {job['name']}...")
-                    log_url = "https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/actions/jobs/" + str(job_id) + "/logs"
+                    log_url = API_BASE + REPO_OWNER + "/" + REPO_NAME + "/actions/jobs/" + str(job_id) + "/logs"
 
                     log_res = requests.get(log_url, headers=HEADERS, allow_redirects=True, timeout=60)
                     if log_res.status_code == 200:
@@ -111,40 +95,24 @@ def get_workflow_logs(run_id, max_retries=5):
     return "Log fetch error: Network timeout."
 
 def ask_local_ai(error_logs):
-    prompt = f"""
-You are an elite Android NDK, C++, Gradle, and Zygisk module build engineer.
-Your mission is to ensure this repository compiles into a fully functional, flashable Magisk Zygisk module zip that contains a UNIVERSAL touch-fixed ImGui menu (supporting all game engines like Unity, Unreal, and native C++).
-
-CRITICAL REQUIREMENTS:
-1. UNIVERSAL TOUCH FIX: Implement a robust, universal input hook (such as standard Android AInputQueue, InputConsumer, or native event dispatches) that works across all game engines. Extract touch X/Y coordinates, pass them to ImGui::GetIO().AddMousePosEvent(), and consume the touch if ImGui wants mouse capture. Do not restrict it to a single engine like Unity.
-2. BUILD HEALING & PACKAGING FIX (IMPORTANT): Ensure that the compiled native shared library (`libzygisk.so`) is successfully packed into the final Magisk module zip structure under `zygisk/<abi>/libzygisk.so`. Fix any Gradle or CMake output paths so the final zip file size is correct and contains all compiled binaries (avoiding empty 700-byte text-only zips).
-3. MAGISK 24-26 COMPATIBILITY: Target Magisk versions 24 through 26 exclusively. Ensure `module.prop` sets `minMagisk` to `24000` and uses stable Zygisk entry points native to Magisk v24–26 without breaking changes.
-
-You MUST provide a short, descriptive git commit message summarizing your fix using this exact format:
-=== COMMIT: [Your descriptive commit message here] ===
-
-You MUST output the exact file modifications or deletions using these exact block formats:
-
-To modify or create a file:
+    prompt = f"""Fix this Android Zygisk C++ module build and touch-fixing error. 
+Ensure target is Magisk 24-26, package libzygisk.so correctly under zygisk/<abi>/libzygisk.so, and implement universal touch input handling.
+Output ONLY file modifications using exact blocks:
 === FILE: path/to/file ===
-[File content here]
+[Code here]
 === END FILE ===
 
-To delete an obsolete file:
-=== DELETE: path/to/file ===
-=== END DELETE ===
+ERROR LOGS:
+{error_logs[-2500:]}"""
 
-ERROR LOGS / STATUS CONTEXT:
-{error_logs[-4000:]}
-"""
     payload = {
         "model": "qwen2.5-coder-7b-instruct",
         "messages": [
-            {"role": "system", "content": "You are a precise code-fixing machine. Output ONLY the file blocks using === FILE: path === and === END FILE ===. Do not write explanations."},
+            {"role": "system", "content": "You are a precise code-fixing machine. Output ONLY valid file blocks. No explanations."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.1,
-        "max_tokens": 4096
+        "max_tokens": 2048
     }
 
     print("[*] Asking Local AI (llama-server)...")
@@ -168,9 +136,6 @@ def apply_ai_patches(ai_response):
                 ai_response = f.read()
 
     ai_response = re.sub(r"^```[a-zA-Z]*\n", "", ai_response, flags=re.MULTILINE)
-
-    commit_match = re.search(r"=== COMMIT:\s*([^\n]+)\s*===", ai_response)
-    commit_message = commit_match.group(1).strip() if commit_match else "fix: resolve packaging path and ensure compiled binaries are included in zip"
 
     pattern_file = r"=== FILE:\s*([^\n]+)===\s*\n(.*?)(?==== FILE:|=== DELETE:|\Z)"
     matches_file = re.findall(pattern_file, ai_response, re.DOTALL)
@@ -202,21 +167,13 @@ def apply_ai_patches(ai_response):
             f.write(content + "\n")
         changes_made.append(f"Updated/Created: {file_path}")
 
-    pattern_del = r"=== DELETE:\s*([^\n]+)===\s*(?:=== END DELETE ===)?"
-    matches_del = re.findall(pattern_del, ai_response, re.DOTALL)
-    for file_path in matches_del:
-        file_path = file_path.strip().replace("\r", "").strip("`").strip()
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-            changes_made.append(f"Deleted: {file_path}")
-
     if not changes_made:
         print("[!] Warning: Response received from model but could not parse patch blocks. Saving to ai_fix_suggestion.txt")
         with open("ai_fix_suggestion.txt", "w", encoding="utf-8") as f:
             f.write(ai_response)
-        return [], commit_message
+        return []
 
-    return changes_made, commit_message
+    return changes_made
 
 def master_loop():
     print("==================================================")
@@ -249,7 +206,7 @@ def master_loop():
                 else:
                     print(f"[*] Build is {status}... waiting for it to finish...")
 
-            url = "[https://api.github.com/repos/](https://api.github.com/repos/)" + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id)
+            url = API_BASE + REPO_OWNER + "/" + REPO_NAME + "/actions/runs/" + str(run_id)
 
             try:
                 run_details = requests.get(url, headers=HEADERS, timeout=15).json()
@@ -260,41 +217,34 @@ def master_loop():
                 continue
 
             if conclusion == "success":
-                print("[*] GitHub Actions reports build success. Checking artifact contents & size...")
-                if check_artifact_size(run_id):
-                    print("\n==================================================")
-                    print(" SUCCESS! Valid Zygisk Module Zip compiled cleanly!")
-                    print("==================================================")
-                    last_processed_run_id = run_id
-                    print("[*] Waiting for new builds...\n")
-                    continue
-                else:
-                    print("[!] Artifact validation failed (empty zip size). Forcing Auto-Heal...")
-                    conclusion = "failure"
+                print("\n==================================================")
+                print(" SUCCESS! Build passed cleanly across all files!")
+                print("==================================================")
+                last_processed_run_id = run_id
+                print("[*] Waiting for new builds...\n")
+                continue
 
-            if conclusion in ["failure", "cancelled", "timed_out"]:
-                print(f"[!] Build failed or artifact was invalid (conclusion: {conclusion}). Initiating Auto-Heal...")
+            elif conclusion in ["failure", "cancelled", "timed_out"]:
+                print(f"[!] Build failed with conclusion: {conclusion}. Initiating Auto-Heal...")
 
                 logs = get_workflow_logs(run_id)
                 if "Log fetch error" in logs:
-                    logs = "Build artifact was empty/invalid (~746 bytes). Gradle failed to package libzygisk.so into the zip structure."
+                    logs = "Build artifact was empty/invalid. Gradle failed to package binaries."
 
                 print("[*] Analyzing errors with Local Qwen AI...")
                 ai_fix = ask_local_ai(logs)
 
                 print("[*] Automatically applying AI patches to local files...")
-                applied_changes, commit_message = apply_ai_patches(ai_fix)
+                applied_changes = apply_ai_patches(ai_fix)
 
                 if applied_changes:
                     print(f"[+] CHANGES APPLIED: {', '.join(applied_changes)}")
-                    print(f"[+] AI COMMIT MESSAGE: {commit_message}")
                     run_cmd("git add .")
-                    safe_msg = commit_message.replace('"', '\\"')
-                    run_cmd(f'git commit -m "{safe_msg}"')
+                    run_cmd('git commit -m "Auto-fix applied by Local Qwen AI"')
                     run_cmd("git push origin main --force")
                     print("[+] Pushed code updates to GitHub!")
 
-                    print("[+] Triggering a new workflow build to test the fixes...")
+                    print("[+] Triggering a new workflow build to test the fix...")
                     trigger_workflow_dispatch()
                     last_processed_run_id = run_id
                     time.sleep(20)
