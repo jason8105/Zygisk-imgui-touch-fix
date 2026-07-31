@@ -3,20 +3,23 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imguimenu'
+    namespace 'com.zygisk.imgui'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.zygisk.imguimenu"
         minSdk 24
         targetSdk 34
         versionCode 100
         versionName "1.0.0"
 
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+        }
+
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -frtti -fexceptions"
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+                cppFlags "-std=c++17 -fvisibility=hidden -fdata-sections -ffunction-sections"
+                arguments "-DANDROID_STL=c++_static"
             }
         }
     }
@@ -24,10 +27,6 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-        debug {
-            debuggable true
         }
     }
 
@@ -37,47 +36,46 @@ android {
             version "3.22.1"
         }
     }
-
-    packagingOptions {
-        jniLibs {
-            useLegacyPackaging true
-        }
-    }
 }
 
-task packageMagiskModule(type: Zip) {
-    dependsOn 'externalNativeBuildRelease', 'assembleRelease'
+task zipModule(type: Zip) {
+    dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName = "zygisk-module.zip"
-    destinationDirectory = file("$buildDir/outputs")
+    archiveFileName = "zygisk-imgui-menu-v1.0.0.zip"
+    destinationDirectory = file("$buildDir/outputs/zip")
 
-    // Include Magisk module definition
-    from(file("${projectDir}/../module")) {
+    // Include module files
+    from("${projectDir}/src/main/module") {
         include 'module.prop'
-        include 'service.sh'
+        include 'customize.sh'
     }
 
-    // Include compiled libzygisk.so binaries into zip under zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
-    def abis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
-    abis.each { abi ->
-        def baseDir = file("$buildDir/intermediates/stripped_native_libs/release/out/lib/${abi}")
-        if (!baseDir.exists()) {
-            baseDir = file("$buildDir/intermediates/merged_native_libs/release/out/lib/${abi}")
-        }
-        from(baseDir) {
-            include 'libzygisk.so'
-            into "zygisk/${abi}"
-        }
-        from(baseDir) {
-            include 'libzygisk.so'
-            into "zygisk"
-            rename 'libzygisk.so', "${abi}.so"
+    // Pack compiled native shared libraries into standard Zygisk layout structures
+    doFirst {
+        def abis = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86']
+        abis.each { abi ->
+            def possiblePaths = [
+                file("$buildDir/intermediates/stripped_native_libs/release/out/lib/$abi/libzygisk.so"),
+                file("$buildDir/intermediates/cmake/release/obj/$abi/libzygisk.so"),
+                file("$buildDir/intermediates/cxx/Release/${abi}/libzygisk.so")
+            ]
+            def libFile = possiblePaths.find { it.exists() }
+            if (libFile) {
+                from(libFile.parentFile) {
+                    include "libzygisk.so"
+                    into "zygisk/$abi"
+                }
+                from(libFile) {
+                    into "zygisk"
+                    rename "libzygisk.so", "${abi}.so"
+                }
+            }
         }
     }
 }
 
-tasks.afterEvaluate {
-    tasks.named('assembleRelease').configure {
-        finalizedBy 'packageMagiskModule'
+tasks.whenTaskAdded { task ->
+    if (task.name == 'assembleRelease' || task.name == 'assemble') {
+        task.finalizedBy zipModule
     }
 }

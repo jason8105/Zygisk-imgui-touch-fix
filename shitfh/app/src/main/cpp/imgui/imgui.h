@@ -1,51 +1,86 @@
 #pragma once
 #include <stddef.h>
-#include <stdint.h>
+#include <float.h>
 
-#ifndef IMGUI_API
-#define IMGUI_API
-#endif
+struct ImDrawData;
+struct ImGuiContext;
+
+typedef int ImGuiWindowFlags;
+typedef int ImGuiCond;
+typedef int ImGuiCol;
+
+enum ImGuiWindowFlags_ {
+    ImGuiWindowFlags_None = 0,
+    ImGuiWindowFlags_NoTitleBar = 1 << 0,
+    ImGuiWindowFlags_NoResize = 1 << 1,
+    ImGuiWindowFlags_NoMove = 1 << 2,
+    ImGuiWindowFlags_NoScrollbar = 1 << 3,
+    ImGuiWindowFlags_NoCollapse = 1 << 5,
+    ImGuiWindowFlags_AlwaysAutoResize = 1 << 6
+};
+
+enum ImGuiCond_ {
+    ImGuiCond_None = 0,
+    ImGuiCond_Always = 1 << 0,
+    ImGuiCond_Once = 1 << 1,
+    ImGuiCond_FirstUseEver = 1 << 2,
+    ImGuiCond_Appearing = 1 << 3
+};
+
+enum ImGuiCol_ {
+    ImGuiCol_Text,
+    ImGuiCol_WindowBg,
+    ImGuiCol_Header,
+    ImGuiCol_Button,
+    ImGuiCol_COUNT
+};
+
+struct ImVec2 {
+    float x, y;
+    ImVec2() : x(0.0f), y(0.0f) {}
+    ImVec2(float _x, float _y) : x(_x), y(_y) {}
+};
+
+struct ImVec4 {
+    float x, y, z, w;
+    ImVec4() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
+    ImVec4(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
+};
+
+struct ImGuiIO {
+    ImVec2 DisplaySize;
+    float DeltaTime;
+    float Framerate;
+    bool WantCaptureMouse;
+    bool WantCaptureKeyboard;
+
+    ImGuiIO() : DisplaySize(0,0), DeltaTime(1.0f/60.0f), Framerate(60.0f), WantCaptureMouse(false), WantCaptureKeyboard(false) {}
+    void AddMousePosEvent(float x, float y);
+    void AddMouseButtonEvent(int button, bool down);
+};
+
+struct ImGuiStyle {
+    float WindowRounding;
+    float FrameRounding;
+    float ScrollbarRounding;
+    ImVec4 Colors[ImGuiCol_COUNT];
+    ImGuiStyle();
+};
 
 namespace ImGui {
-    struct ImVec2 {
-        float x, y;
-        ImVec2() : x(0.0f), y(0.0f) {}
-        ImVec2(float _x, float _y) : x(_x), y(_y) {}
-    };
+    ImGuiContext* CreateContext();
+    void DestroyContext(ImGuiContext* ctx = nullptr);
+    ImGuiIO& GetIO();
+    ImGuiStyle& GetStyle();
+    void NewFrame();
+    void Render();
+    ImDrawData* GetDrawData();
 
-    struct ImVec4 {
-        float x, y, z, w;
-        ImVec4() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
-        ImVec4(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
-    };
-
-    struct ImDrawData {};
-
-    enum ImGuiCond_ {
-        ImGuiCond_None = 0,
-        ImGuiCond_FirstUseEver = 1 << 2
-    };
-
-    struct ImGuiIO {
-        ImVec2 DisplaySize;
-        bool WantCaptureMouse;
-        void AddMousePosEvent(float x, float y) { (void)x; (void)y; }
-        void AddMouseButtonEvent(int button, bool down) { (void)button; (void)down; }
-        ImGuiIO() : DisplaySize(1920.0f, 1080.0f), WantCaptureMouse(false) {}
-    };
-
-    IMGUI_API const char* IMGUI_CHECKVERSION();
-    IMGUI_API void CreateContext();
-    IMGUI_API ImGuiIO& GetIO();
-    IMGUI_API void StyleColorsDark();
-    IMGUI_API void NewFrame();
-    IMGUI_API void Render();
-    IMGUI_API ImDrawData* GetDrawData();
-    IMGUI_API bool Begin(const char* name, bool* p_open = nullptr, int flags = 0);
-    IMGUI_API void End();
-    IMGUI_API void Text(const char* fmt, ...);
-    IMGUI_API void Separator();
-    IMGUI_API bool Checkbox(const char* label, bool* v);
-    IMGUI_API bool SliderFloat(const char* label, float* v, float v_min, float v_max);
-    IMGUI_API bool Button(const char* label, const ImVec2& size = ImVec2(0, 0));
+    bool Begin(const char* name, bool* p_open = nullptr, ImGuiWindowFlags flags = 0);
+    void End();
+    void Text(const char* fmt, ...);
+    void Separator();
+    bool Checkbox(const char* label, bool* v);
+    void SetNextWindowSize(const ImVec2& size, ImGuiCond cond = 0);
 }
+#define IMGUI_CHECKVERSION() true

@@ -1,2 +1,2 @@
 #include "imgui.h"
-// Placeholder for table layout commands compilation
+// Minimal table implementation stub
