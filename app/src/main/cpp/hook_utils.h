@@ -1,9 +1,14 @@
 #pragma once
-
-#include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
-namespace HookUtils {
-    bool HookSymbol(const char* libName, const char* symbolName, void* hookFunc, void** origFunc);
-    void* GetModuleBase(const char* moduleName);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void* find_library_symbol(const char* lib_name, const char* symbol_name);
+bool plt_hook(const char* lib_name, const char* symbol_name, void* replace_fn, void** orig_fn);
+
+#ifdef __cplusplus
 }
+#endif
