@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
 }
@@ -7,7 +9,6 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.zygisk.imgui"
         minSdk = 24
         targetSdk = 34
         versionCode = 100
@@ -15,9 +16,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -fvisibility=hidden -fdata-sections -ffunction-sections")
+                cppFlags("-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden")
                 arguments("-DANDROID_STL=c++_static")
-                abiFilters("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+                abiFilters("arm64-v8a", "armeabi-v7a", "x86_64")
             }
         }
     }
@@ -27,9 +28,6 @@ android {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-        debug {
-            isMinifyEnabled = false
-        }
     }
 
     externalNativeBuild {
@@ -38,47 +36,33 @@ android {
             version = "3.22.1"
         }
     }
-
-    ndkVersion = "25.2.9519653"
 }
 
-// Magisk Module ZIP Packaging Task
-tasks.register<Zip>("zipModule") {
+val packageMagiskZip = tasks.register<Zip>("packageMagiskZip") {
     dependsOn("externalNativeBuildRelease")
 
-    archiveFileName.set("zygisk_imgui_menu.zip")
+    archiveFileName.set("Zygisk_Universal_ImGui.zip")
     destinationDirectory.set(file("${rootDir}/out"))
 
-    // Include base module properties
-    from(file("${rootDir}/module")) {
-        include("module.prop", "service.sh", "post-fs-data.sh", "system.prop")
+    from(file("${rootDir}/module.prop"))
+    from(file("${rootDir}/customize.sh"))
+
+    val nativeLibsDir = file("${layout.buildDirectory.get()}/intermediates/stripped_native_libs/release/out/lib")
+
+    into("zygisk/arm64-v8a") {
+        from(file("$nativeLibsDir/arm64-v8a/libzygisk.so"))
     }
-
-    // Include compiled libzygisk.so native libraries for each ABI
-    val abis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-    abis.forEach { abi ->
-        val candidateDirs = listOf(
-            file("${buildDir}/intermediates/stripped_native_libs/release/out/lib/$abi"),
-            file("${buildDir}/intermediates/merged_native_libs/release/out/lib/$abi"),
-            file("${buildDir}/intermediates/cmake/release/obj/$abi"),
-            file("${buildDir}/intermediates/cxx/Release/*/obj/$abi"),
-            file("${buildDir}/intermediates/cxx/RelWithDebInfo/*/obj/$abi")
-        )
-
-        val libFile = candidateDirs.map { file("${it.path}/libzygisk.so") }.firstOrNull { it.exists() }
-        if (libFile != null) {
-            from(libFile) {
-                into("zygisk/$abi")
-                rename { "libzygisk.so" }
-            }
-            from(libFile) {
-                into("zygisk")
-                rename { "$abi.so" }
-            }
-        }
+    into("zygisk/armeabi-v7a") {
+        from(file("$nativeLibsDir/armeabi-v7a/libzygisk.so"))
+    }
+    into("zygisk/x86_64") {
+        from(file("$nativeLibsDir/x86_64/libzygisk.so"))
+    }
+    into("zygisk/x86") {
+        from(file("$nativeLibsDir/x86/libzygisk.so"))
     }
 }
 
 tasks.named("assembleRelease") {
-    finalizedBy("zipModule")
+    finalizedBy(packageMagiskZip)
 }

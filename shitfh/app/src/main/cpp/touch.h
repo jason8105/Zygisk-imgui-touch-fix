@@ -1,13 +1,10 @@
-#ifndef TOUCH_H
-#define TOUCH_H
+#pragma once
 
 #include <android/input.h>
+#include <android/native_window.h>
+#include "imgui/imgui.h"
 
-namespace TouchHook {
-    void Init();
-    bool IsMenuOpen();
-    void SetMenuOpen(bool open);
-    void ProcessMotionEvent(AInputEvent* event);
+namespace UniversalTouch {
+    void SetDisplaySize(int width, int height);
+    bool HandleInputEvent(AInputEvent* event);
 }
-
-#endif // TOUCH_H

@@ -1,57 +1,30 @@
-cmake_minimum_required(VERSION 3.18.1)
-project(zygisk_imgui C CXX)
+cmake_minimum_required(VERSION 3.22.1)
+project("zygisk_imgui")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include(FetchContent)
-
-# Fetch Dobby
-FetchContent_Declare(
-    dobby
-    GIT_REPOSITORY https://github.com/jmpews/Dobby.git
-    GIT_TAG        main
-)
-FetchContent_MakeAvailable(dobby)
-
-# Fetch ImGui
-FetchContent_Declare(
-    imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        v1.90.4
-)
-FetchContent_MakeAvailable(imgui)
-
-# Define ImGui static library
-add_library(imgui STATIC
-    ${imgui_SOURCE_DIR}/imgui.cpp
-    ${imgui_SOURCE_DIR}/imgui_demo.cpp
-    ${imgui_SOURCE_DIR}/imgui_draw.cpp
-    ${imgui_SOURCE_DIR}/imgui_tables.cpp
-    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-)
-
-target_include_directories(imgui PUBLIC
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-)
-
-# Compile Zygisk module library
 add_library(zygisk SHARED
     main.cpp
+    touch.cpp
+    imgui/imgui.cpp
+    imgui/imgui_draw.cpp
+    imgui/imgui_tables.cpp
+    imgui/imgui_widgets.cpp
+    imgui/backends/imgui_impl_opengl3.cpp
+    imgui/backends/imgui_impl_android.cpp
+)
+
+target_include_directories(zygisk PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends
 )
 
 target_link_libraries(zygisk
-    imgui
-    dobby
-    log
-    EGL
-    GLES3
     android
-)
-
-set_target_properties(zygisk PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lib"
-    OUTPUT_NAME "zygisk"
+    EGL
+    GLESv3
+    log
+    dl
 )
