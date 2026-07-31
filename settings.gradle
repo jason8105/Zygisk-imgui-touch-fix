@@ -12,5 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "ZygiskImGui"
+
+rootProject.name = "ZygiskImGuiMenu"
 include ':app'

@@ -1,30 +1,26 @@
 #include "imgui.h"
-#include <stdio.h>
-#include <stdarg.h>
 
 static ImGuiIO g_IO;
-
-void ImGuiIO::AddMousePosEvent(float x, float y) {
-    // Universal touch input injection point
-}
-
-void ImGuiIO::AddMouseButtonEvent(int button, bool down) {
-    // Universal touch input button state update
-}
+static ImGuiStyle g_Style;
+static ImDrawData g_DrawData;
 
 namespace ImGui {
-    void IMGUI_CHECKVERSION() {}
-    void* CreateContext() { return nullptr; }
-    ImGuiIO& GetIO() { g_IO.Framerate = 60.0f; return g_IO; }
-    void StyleColorsDark() {}
-    void NewFrame() {}
-    void Render() {}
-    ImDrawData* GetDrawData() { return nullptr; }
 
-    bool Begin(const char* name, bool* p_open, ImGuiWindowFlags flags) { return true; }
-    void End() {}
-    void Text(const char* fmt, ...) {}
-    void Separator() {}
-    bool Checkbox(const char* label, bool* v) { return false; }
-    bool SliderFloat(const char* label, float* v, float v_min, float v_max) { return false; }
+bool DebugCheckVersionAndDataLayout(const char*, size_t, size_t, size_t, size_t, size_t, size_t) { return true; }
+void CreateContext() {}
+ImGuiIO& GetIO() { return g_IO; }
+ImGuiStyle& GetStyle() { return g_Style; }
+void StyleColorsDark() {}
+void NewFrame() {}
+void Render() {}
+ImDrawData* GetDrawData() { return &g_DrawData; }
+void SetNextWindowSize(const ImVec2&, ImGuiCond) {}
+bool Begin(const char*, bool*, int) { return true; }
+void End() {}
+void Text(const char*, ...) {}
+void Separator() {}
+bool Checkbox(const char*, bool* v) { return false; }
+bool SliderFloat(const char*, float*, float, float) { return false; }
+bool Button(const char*) { return false; }
+
 }

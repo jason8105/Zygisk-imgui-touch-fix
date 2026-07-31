@@ -15,7 +15,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden -Wall"
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden -DANDROID"
                 arguments "-DANDROID_STL=c++_static"
                 abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
@@ -27,54 +27,50 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+        debug {
+            debuggable true
+        }
     }
+
     externalNativeBuild {
         cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
+            path "CMakeLists.txt"
+            version "3.22.1"
         }
     }
-    buildFeatures {
-        prefab false
+
+    packagingOptions {
+        exclude '**/*'
     }
 }
 
-tasks.register('packageMagiskModule', Zip) {
+task zipModule(type: Zip) {
     dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName.set("Zygisk-Universal-ImGui-v1.0.0.zip")
-    destinationDirectory.set(file("${project.rootDir}/out"))
+    archiveFileName = "zygisk-imgui-menu.zip"
+    destinationDirectory = file("${project.buildDir}/outputs/zip")
 
-    from(file("${project.rootDir}/module.prop"))
-    from(file("${project.rootDir}/customize.sh"))
+    // Copy template files
+    from("src/main/template")
 
-    def abis = ['arm64-v8a', 'armeabi-v7a']
-    abis.each { abi ->
-        // Standard path 1: zygisk/<abi>/libzygisk.so
-        into("zygisk/${abi}") {
-            from("${buildDir}/intermediates/cxx/Release") {
-                include "**/${abi}/libzygisk.so"
-                eachFile { it.path = "libzygisk.so" }
-            }
-            from("${buildDir}/intermediates/cmake/release/obj/${abi}") {
-                include "libzygisk.so"
-            }
+    // Ensure native libraries compiled by CMake are packed into zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
+    ['arm64-v8a', 'armeabi-v7a'].each { abi ->
+        from("build/target_libs/${abi}") {
+            include "libzygisk.so"
+            into "zygisk/${abi}"
         }
-        
-        // Standard path 2: zygisk/<abi>.so
-        into("zygisk") {
-            from("${buildDir}/intermediates/cxx/Release") {
-                include "**/${abi}/libzygisk.so"
-                eachFile { it.path = "${abi}.so" }
-            }
-            from("${buildDir}/intermediates/cmake/release/obj/${abi}") {
-                include "libzygisk.so"
-                eachFile { it.path = "${abi}.so" }
-            }
+        from("build/target_libs/${abi}") {
+            include "libzygisk.so"
+            rename "libzygisk.so", "${abi}.so"
+            into "zygisk"
         }
     }
 }
 
-tasks.named('build').configure {
-    finalizedBy 'packageMagiskModule'
+tasks.afterEvaluate {
+    if (tasks.findByName('packageReleaseModule')) {
+        packageReleaseModule.dependsOn zipModule
+    } else {
+        assemble.finalizedBy zipModule
+    }
 }
