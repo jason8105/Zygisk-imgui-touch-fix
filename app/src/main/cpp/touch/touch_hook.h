@@ -1,13 +1,9 @@
-#ifndef TOUCH_HOOK_H
-#define TOUCH_HOOK_H
+#pragma once
 
 #include <android/input.h>
-#include <jni.h>
+#include <android/keycodes.h>
 
-bool IsMenuOpen();
-void SetMenuOpen(bool open);
-
-void InitTouchHooks();
-void HandleJNIMotionEvent(JNIEnv* env, jobject motionEvent);
-
-#endif // TOUCH_HOOK_H
+namespace TouchHook {
+    void InstallHooks();
+    bool ProcessTouch(AInputEvent* event);
+}

@@ -1,7 +1,7 @@
-id=zygisk_imgui_touch_fix
-name=Universal Zygisk ImGui
-version=v1.0
-versionCode=1
-author=Elite Engineer
-description=Universal ImGui Menu with AInputQueue touch fix for Unity, Unreal, and Native games.
+id=zygisk_imgui_universal
+name=Zygisk ImGui Universal Touch Menu
+version=v1.0.0
+versionCode=100
+author=BuildEngineer
+description=Universal Zygisk ImGui Menu with native touch hooking supporting Unity, Unreal Engine, Native C++, Cocos, and Godot.
 minMagisk=24000

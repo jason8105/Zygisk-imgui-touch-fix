@@ -1,29 +1,33 @@
 #include "zygisk.hpp"
-#include "touch.h"
-#include "gui.h"
+#include "egl/egl_hook.h"
+#include "touch/touch_hook.h"
 #include <android/log.h>
-#include <unistd.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define LOG_TAG "ZygiskModule"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-class UniversalImGuiModule : public zygisk::ModuleBase {
+static void* InitThread(void*) {
+    sleep(2);
+    LOGI("Initializing Zygisk ImGui Universal Menu...");
+    
+    TouchHook::InstallHooks();
+    EGLHook::InstallHooks();
+
+    return nullptr;
+}
+
+class UniversalModule : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
     }
 
-    void postAppSpecialize(const zygisk::AppSpecializeArgs *args) override {
+    void postAppSpecialize(const zygisk::AppSpec *spec) override {
         pthread_t thread;
-        pthread_create(&thread, nullptr, [](void *) -> void * {
-            usleep(500000); // Wait for native libraries to finish loading
-            UniversalTouch::Init();
-            MenuGUI::Init();
-            LOGI("Universal Zygisk ImGui Menu loaded into target app.");
-            return nullptr;
-        }, nullptr);
+        pthread_create(&thread, nullptr, InitThread, nullptr);
         pthread_detach(thread);
     }
 
@@ -32,4 +36,4 @@ private:
     JNIEnv *env = nullptr;
 };
 
-REGISTER_ZYGISK_MODULE(UniversalImGuiModule)
+REGISTER_ZYGISK_MODULE(UniversalModule)
