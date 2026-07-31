@@ -3,20 +3,24 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui.menu'
+    namespace 'com.example.zygiskmenu'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.zygisk.imgui.menu"
+        applicationId "com.example.zygiskmenu"
         minSdk 24
         targetSdk 34
         versionCode 100
         versionName "1.0.0"
 
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+        }
+
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden -fdata-sections -ffunction-sections"
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden -O3"
+                arguments "-DANDROID_STL=c++_static"
             }
         }
     }
@@ -24,7 +28,9 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
         }
     }
 
@@ -34,49 +40,40 @@ android {
             version "3.22.1"
         }
     }
-
-    packagingOptions {
-        exclude '**/*.so'
-    }
 }
 
-task makeZip(type: Zip) {
+tasks.register('zipModule', Zip) {
     dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName = "zygisk-imgui-menu.zip"
-    destinationDirectory = file("${buildDir}/outputs/zip")
+    archiveFileName = "zygisk-module.zip"
+    destinationDirectory = file("$buildDir/outputs")
 
-    // Include module files (module.prop, customize.sh, etc.)
-    from("${project.rootDir}/module")
-
-    // Dynamically collect compiled libzygisk.so for all ABIs
-    def abiList = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
-    abiList.each { abi ->
-        from("${buildDir}/intermediates") {
-            include "**/release/**/${abi}/libzygisk.so"
-            include "**/Release/**/${abi}/libzygisk.so"
-            eachFile { details ->
-                details.path = "zygisk/${abi}/libzygisk.so"
-            }
-            includeEmptyDirs = false
-        }
-        from("${buildDir}/intermediates") {
-            include "**/release/**/${abi}/libzygisk.so"
-            include "**/Release/**/${abi}/libzygisk.so"
-            eachFile { details ->
-                details.path = "zygisk/${abi}.so"
-            }
-            includeEmptyDirs = false
-        }
+    // Zip root metadata files from project directory
+    from(projectDir) {
+        include 'module.prop'
+        include 'customize.sh'
+        include 'service.sh'
     }
 
-    doFirst {
-        println "Packing Zygisk module binaries into output ZIP..."
+    // Packaging compiled binaries into both zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
+    def abiList = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+    abiList.each { abi ->
+        def foundLibs = fileTree(dir: "$buildDir/intermediates", include: "**/$abi/libzygisk.so").files
+        if (!foundLibs.isEmpty()) {
+            def libFile = foundLibs.first()
+            from(libFile) {
+                into "zygisk/$abi"
+            }
+            from(libFile) {
+                rename { "${abi}.so" }
+                into "zygisk"
+            }
+        }
     }
 }
 
-tasks.whenTaskAdded { task ->
-    if (task.name == 'assembleRelease') {
-        task.finalizedBy 'makeZip'
+afterEvaluate {
+    tasks.named("assembleRelease").configure {
+        finalizedBy("zipModule")
     }
 }

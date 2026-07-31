@@ -1,2 +1,3 @@
 #!/system/bin/sh
-# Magisk late_start service script
+MODDIR=${0%/*}
+# Background service initialization script
