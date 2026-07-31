@@ -1,7 +1,0 @@
-id=zygisk_imgui_universal
-name=Zygisk Universal ImGui Menu
-version=v1.0.0
-versionCode=100
-author=Universal Build Engineer
-description=Universal ImGui Overlay module with universal touch fix (AInputQueue/InputConsumer) supporting Unity, Unreal Engine, Cocos, and C++ Native games.
-minMagisk=24000

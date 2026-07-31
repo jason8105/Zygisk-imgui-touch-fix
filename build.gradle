@@ -1,60 +1,21 @@
-plugins {
-    id 'com.android.library'
-}
-
-android {
-    namespace 'com.zygisktouchfix.module'
-    compileSdk 33
-
-    defaultConfig {
-        minSdk 24
-        targetSdk 33
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -fno-rtti -fno-exceptions"
-                arguments "-DANDROID_STL=c++_shared"
-            }
-        }
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
     }
-
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
-    }
-    
-    buildTypes {
-        release {
-            minifyEnabled false
-        }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.2'
     }
 }
 
-task prepareMagiskFiles(type: Copy) {
-    dependsOn 'assembleRelease'
-    // Ensure directories exist before copying to prevent Gradle input validation issues
-    doFirst {
-        file("$buildDir/magisk/zygisk").mkdirs()
-        file("$buildDir/magisk/META-INF/com/google/android").mkdirs()
-    }
-    
-    from('src/main/magisk') {
-        include 'module.prop', 'post-fs-data.sh', 'service.sh', 'customize.sh'
-    }
-    into "$buildDir/magisk"
-
-    // Copy compiled native shared libraries into zygisk/<abi>/libzygisk.so structure
-    into('zygisk') {
-        from("${layout.buildDirectory.get().asFile}/intermediates/cmake/release/obj")
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
     }
 }
 
-task buildMagiskZip(type: Zip) {
-    dependsOn 'prepareMagiskFiles'
-    archiveFileName = "Zygisk-ImGui-Universal-Release.zip"
-    destinationDirectory = file("$buildDir/outputs/magisk")
-    from "$buildDir/magisk"
+task clean(type: Delete) {
+    delete rootProject.buildDir
+    delete "${rootProject.rootDir}/out"
 }
-
-assemble.finalizedBy(buildMagiskZip)

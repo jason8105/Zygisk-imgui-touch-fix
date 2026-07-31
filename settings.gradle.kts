@@ -12,5 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "ZygiskImGuiTouchFix"
-include(":module")
+
+rootProject.name = "ZygiskUniversalImGui"
+include(":app")
