@@ -3,24 +3,20 @@ plugins {
 }
 
 android {
-    compileSdk 34
-    namespace 'com.zygisk.imgui.menu'
+    compileSdk 33
+    namespace 'com.universal.zygisk.imgui'
 
     defaultConfig {
-        applicationId "com.zygisk.imgui.menu"
-        minSdk 24
-        targetSdk 34
+        minSdk 21
+        targetSdk 33
         versionCode 100
         versionName "1.0.0"
 
-        ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
-        }
-
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fdata-sections -ffunction-sections"
+                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden"
                 arguments "-DANDROID_STL=c++_static"
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
             }
         }
     }
@@ -28,58 +24,63 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
+            version "3.18.1+"
         }
+    }
+
+    packagingOptions {
+        exclude '**/*'
     }
 }
 
-// Universal Magisk Module packaging task
 tasks.register('packageMagiskModule', Zip) {
     dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName = "zygisk-imgui-menu-v1.0.0.zip"
-    destinationDirectory = file("$buildDir/outputs/zip")
+    archiveFileName = "zygisk-imgui-menu.zip"
+    destinationDirectory = file("${buildDir}/outputs")
 
-    // Root properties and setup
-    from("${project.rootDir}/module.prop")
-    from("${project.rootDir}/customize.sh")
-    from("${project.rootDir}/META-INF") {
-        into("META-INF")
-    }
-
-    // Dynamic resolution of stripped native shared libraries
-    def intermediatesDir = file("$buildDir/intermediates")
-
-    // Package 64-bit ABI (arm64-v8a)
-    from(fileTree(dir: intermediatesDir, includes: ["**/arm64-v8a/libzygisk.so"])) {
-        into "zygisk"
-        rename "libzygisk.so", "arm64-v8a.so"
-        eachFile { it.path = "zygisk/arm64-v8a.so" }
-    }
-    from(fileTree(dir: intermediatesDir, includes: ["**/arm64-v8a/libzygisk.so"])) {
-        into "zygisk/arm64-v8a"
-        eachFile { it.path = "zygisk/arm64-v8a/libzygisk.so" }
+    // Root module metadata files
+    from("${project.rootDir}/module") {
+        include 'module.prop'
+        include 'customize.sh'
     }
 
-    // Package 32-bit ABI (armeabi-v7a)
-    from(fileTree(dir: intermediatesDir, includes: ["**/armeabi-v7a/libzygisk.so"])) {
-        into "zygisk"
-        rename "libzygisk.so", "armeabi-v7a.so"
-        eachFile { it.path = "zygisk/armeabi-v7a.so" }
+    doFirst {
+        def stagingDir = file("${buildDir}/tmp/zip_staging")
+        stagingDir.mkdirs()
+
+        ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'].each { abi ->
+            def filesFound = fileTree(dir: buildDir, include: "**/libzygisk.so").filter { f ->
+                f.path.contains(abi)
+            }
+            if (!filesFound.isEmpty()) {
+                def soFile = filesFound.first()
+                println "Packing Zygisk binary for ABI [${abi}]: ${soFile.path}"
+
+                // Copy to zygisk/<abi>/libzygisk.so
+                copy {
+                    from soFile
+                    into "${buildDir}/tmp/zip_staging/zygisk/${abi}"
+                }
+                // Copy to zygisk/<abi>.so for backwards compatibility
+                copy {
+                    from soFile
+                    into "${buildDir}/tmp/zip_staging/zygisk"
+                    rename "libzygisk.so", "${abi}.so"
+                }
+            }
+        }
     }
-    from(fileTree(dir: intermediatesDir, includes: ["**/armeabi-v7a/libzygisk.so"])) {
-        into "zygisk/armeabi-v7a"
-        eachFile { it.path = "zygisk/armeabi-v7a/libzygisk.so" }
-    }
+
+    from("${buildDir}/tmp/zip_staging")
 }
 
-tasks.matching { it.name == 'assembleRelease' || it.name == 'build' }.configureEach {
+tasks.matching { it.name == 'assembleRelease' }.configureEach {
     finalizedBy 'packageMagiskModule'
 }

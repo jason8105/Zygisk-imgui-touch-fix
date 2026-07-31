@@ -1,14 +1,46 @@
-#ifndef ZYGISK_HPP
-#define ZYGISK_HPP
+#pragma once
 
 #include <jni.h>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace zygisk {
 
-class Api;
-class AppSpecializeArgs;
-class ServerSpecializeArgs;
+struct AppSpecializeArgs {
+    jint *uid;
+    jint *gid;
+    jintArray *gids;
+    jint *runtime_flags;
+    jobjectArray *rlimits;
+    jint *mount_external;
+    jstring *se_info;
+    jstring *nice_name;
+    jintArray *is_child_zygote;
+    jstring *instruction_set;
+    jstring *app_data_dir;
+    jboolean *is_top_app;
+    jobjectArray *pkg_data_info_list;
+    jobjectArray *whitelisted_data_info_list;
+    jboolean *mount_data_dirs;
+    jboolean *mount_storage_dirs;
+};
 
+struct ServerSpecializeArgs {
+    jint *uid;
+    jint *gid;
+    jintArray *gids;
+    jint *runtime_flags;
+    jobjectArray *rlimits;
+    jlong *permitted_capabilities;
+    jlong *effective_capabilities;
+};
+
+enum Option : uint32_t {
+    DLCLOSE_MODULE_LIBRARY = 1 << 0,
+    FORCE_DENYLIST_UNMOUNT = 1 << 1,
+};
+
+class Api;
 class ModuleBase {
 public:
     virtual void onLoad(Api *api, JNIEnv *env) {}
@@ -20,23 +52,21 @@ public:
 
 class Api {
 public:
-    virtual void connectCompanion(int socket) = 0;
-    virtual void setOption(int option) = 0;
-    virtual int getApiVersion() = 0;
-};
-
-enum Option {
-    FORCE_DENYLIST_UNMOUNT = 0,
-    DLCLOSE_MODULE_LIBRARY = 1,
+    void *impl;
+    void connectCompanion();
+    int getCompanionSocket();
+    void setOption(Option opt);
+    bool exemptAppEnv();
 };
 
 } // namespace zygisk
 
-#define REGISTER_ZYGISK_MODULE(clazz) \
-    extern "C" [[gnu::visibility("default")]] \
-    void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-        static clazz module; \
-        module.onLoad(api, env); \
-    }
+extern "C" {
+    void zygisk_module_entry(zygisk::Api *api, JNIEnv *env);
+}
 
-#endif // ZYGISK_HPP
+#define REGISTER_ZYGISK_MODULE(clazz) \
+static clazz _zygisk_module_instance; \
+extern "C" void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
+    _zygisk_module_instance.onLoad(api, env); \
+}
