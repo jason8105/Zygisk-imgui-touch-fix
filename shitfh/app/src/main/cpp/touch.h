@@ -1,10 +1,10 @@
 #pragma once
 
 #include <android/input.h>
-#include <android/native_window.h>
-#include "imgui/imgui.h"
+#include <EGL/egl.h>
 
-namespace UniversalTouch {
-    void SetDisplaySize(int width, int height);
-    bool HandleInputEvent(AInputEvent* event);
+namespace TouchHandler {
+    void InitHooks();
+    bool ProcessInputEvent(AInputEvent* event);
+    void OnEglSwapBuffers(EGLDisplay dpy, EGLSurface surface);
 }

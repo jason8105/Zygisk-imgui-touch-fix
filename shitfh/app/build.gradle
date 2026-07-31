@@ -13,13 +13,11 @@ android {
         versionCode 100
         versionName "1.0.0"
 
-        ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a'
-        }
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -frtti -fexceptions"
-                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden"
+                arguments "-DANDROID_STL=c++_static"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
         }
     }
@@ -30,43 +28,54 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.18.1"
+            version "3.22.1"
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += ['**/*']
         }
     }
 }
 
-dependencies {
-    // No extra java dependencies needed
-}
+tasks.register('zip', Zip) {
+    dependsOn 'externalNativeBuildRelease'
 
-// Magisk module packager task
-task zipModule(type: Zip) {
-    archiveFileName = "zygisk-universal-imgui.zip"
-    destinationDirectory = file("$rootDir/out")
+    archiveFileName = "zygisk-imgui-menu.zip"
+    destinationDirectory = file("${buildDir}/outputs/zip")
 
-    // Copy template module prop and files
-    from("$rootDir/template") {
-        include "**/*"
+    from("${project.rootDir}/module") {
+        include 'module.prop'
+        include 'customize.sh'
     }
 
-    // Map each compiled .so to the Zygisk directories
-    def buildType = "release"
-    def nativeOutDir = file("$buildDir/intermediates/stripped_native_libs/${buildType}/out/lib")
-
-    // Wait for the build task to run first
-    dependsOn "assembleRelease"
-
-    into("zygisk") {
-        from(nativeOutDir) {
-            include "**/libzygisk.so"
+    into('zygisk') {
+        from("${buildDir}/intermediates/cmake/release/obj/arm64-v8a") {
+            include 'libzygisk.so'
+            rename 'libzygisk.so', 'arm64-v8a.so'
+        }
+        from("${buildDir}/intermediates/cmake/release/obj/armeabi-v7a") {
+            include 'libzygisk.so'
+            rename 'libzygisk.so', 'armeabi-v7a.so'
+        }
+        from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/arm64-v8a") {
+            include 'libzygisk.so'
+            rename 'libzygisk.so', 'arm64-v8a.so'
+        }
+        from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/armeabi-v7a") {
+            include 'libzygisk.so'
+            rename 'libzygisk.so', 'armeabi-v7a.so'
         }
     }
 }
 
-// Always clean output directory before zip
-zipModule.doFirst {
-    file("$rootDir/out").mkdirs()
+afterEvaluate {
+    tasks.named('assembleRelease').configure {
+        finalizedBy 'zip'
+    }
 }
