@@ -1,7 +1,7 @@
-id=zygisk_imgui_touch_fix
-name=Zygisk Universal ImGui Touch Fix
+id=zygisk_universal_imgui
+name=Universal Zygisk ImGui Menu
 version=v1.0.0
 versionCode=100
-author=Build Engineer
-description=Universal touch-fixed ImGui menu for all Android game engines (Unity, Unreal, Native C++).
+author=BuildEngineer
+description=Universal touch-fixed ImGui menu overlay for Unity, Unreal Engine, and Native Android games.
 minMagisk=24000

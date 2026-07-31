@@ -1,0 +1,13 @@
+#!/sbin/sh
+# Magisk Module Updater Script
+UMASK=0022
+OIFS=$IFS
+IFS='
+'
+export PATH=/sbin:/system/sbin:/system/bin:/system/xbin:$PATH
+
+MODULE_ZIP="$2"
+INSTALLER="$3"
+
+magisk --install-module "$MODULE_ZIP"
+exit $?

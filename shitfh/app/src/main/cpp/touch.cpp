@@ -1,101 +1,90 @@
 #include "touch.h"
-#include "hook.h"
 #include "imgui.h"
-#include <android/input.h>
 #include <dlfcn.h>
 #include <android/log.h>
+#include <android/input.h>
 
-#define LOG_TAG "ZygiskImGuiTouch"
+#define LOG_TAG "ZygiskTouch"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-typedef int (*t_AInputQueue_getEvent)(AInputQueue* queue, AInputEvent** outEvent);
-typedef int (*t_AInputQueue_preDispatchEvent)(AInputQueue* queue, AInputEvent* event);
-typedef void (*t_AInputQueue_finishEvent)(AInputQueue* queue, AInputEvent* event, int handled);
-typedef AInputEvent* (*t_AMotionEvent_fromJava)(JNIEnv* env, jobject jobj);
+static bool g_MenuOpen = true;
 
-static t_AInputQueue_getEvent orig_AInputQueue_getEvent = nullptr;
-static t_AInputQueue_preDispatchEvent orig_AInputQueue_preDispatchEvent = nullptr;
-static t_AInputQueue_finishEvent orig_AInputQueue_finishEvent = nullptr;
-static t_AMotionEvent_fromJava orig_AMotionEvent_fromJava = nullptr;
+namespace TouchHook {
+    bool IsMenuOpen() { return g_MenuOpen; }
+    void SetMenuOpen(bool open) { g_MenuOpen = open; }
+}
 
-bool process_touch_event(AInputEvent* event) {
-    if (!event) return false;
+typedef int (*pfn_AInputQueue_getEvent)(AInputQueue* queue, AInputEvent** outEvent);
+typedef void (*pfn_AInputQueue_finishEvent)(AInputQueue* queue, AInputEvent* event, int handled);
 
-    int32_t eventType = AInputEvent_getType(event);
-    if (eventType != AINPUT_EVENT_TYPE_MOTION) {
-        return false;
-    }
+static pfn_AInputQueue_getEvent orig_AInputQueue_getEvent = nullptr;
+static pfn_AInputQueue_finishEvent orig_AInputQueue_finishEvent = nullptr;
 
-    ImGuiIO& io = ImGui::GetIO();
+void TouchHook::ProcessMotionEvent(AInputEvent* event) {
+    if (!event) return;
+
+    int32_t type = AInputEvent_getType(event);
+    if (type != AINPUT_EVENT_TYPE_MOTION) return;
 
     int32_t action = AMotionEvent_getAction(event);
-    int32_t flags = action & AMOTION_EVENT_ACTION_MASK;
-    size_t pointerCount = AMotionEvent_getPointerCount(event);
+    int32_t actionMasked = action & AMOTION_EVENT_ACTION_MASK;
+    size_t pointerIndex = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
 
-    if (pointerCount > 0) {
-        float x = AMotionEvent_getX(event, 0);
-        float y = AMotionEvent_getY(event, 0);
+    float x = AMotionEvent_getX(event, pointerIndex);
+    float y = AMotionEvent_getY(event, pointerIndex);
 
-        io.AddMousePosEvent(x, y);
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMousePosEvent(x, y);
 
-        if (flags == AMOTION_EVENT_ACTION_DOWN || flags == AMOTION_EVENT_ACTION_POINTER_DOWN) {
-            io.AddMouseButtonEvent(0, true);
-        } else if (flags == AMOTION_EVENT_ACTION_UP || flags == AMOTION_EVENT_ACTION_POINTER_UP || flags == AMOTION_EVENT_ACTION_CANCEL) {
-            io.AddMouseButtonEvent(0, false);
-        }
+    if (actionMasked == AMOTION_EVENT_ACTION_DOWN || actionMasked == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+        io.AddMouseButtonEvent(0, true);
+    } else if (actionMasked == AMOTION_EVENT_ACTION_UP || actionMasked == AMOTION_EVENT_ACTION_POINTER_UP || actionMasked == AMOTION_EVENT_ACTION_CANCEL) {
+        io.AddMouseButtonEvent(0, false);
     }
-
-    return io.WantCaptureMouse;
 }
 
+// Universal AInputQueue_getEvent hook supporting Unity, Unreal Engine, and Native engines
 int hook_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** outEvent) {
-    if (!orig_AInputQueue_getEvent) return -1;
+    while (true) {
+        int ret = orig_AInputQueue_getEvent ? orig_AInputQueue_getEvent(queue, outEvent) : -1;
+        if (ret < 0 || outEvent == nullptr || *outEvent == nullptr) {
+            return ret;
+        }
 
-    int res = orig_AInputQueue_getEvent(queue, outEvent);
-    if (res >= 0 && outEvent && *outEvent) {
-        bool consumed = process_touch_event(*outEvent);
-        if (consumed) {
-            if (orig_AInputQueue_finishEvent) {
-                orig_AInputQueue_finishEvent(queue, *outEvent, 1);
+        AInputEvent* event = *outEvent;
+        if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
+            TouchHook::ProcessMotionEvent(event);
+
+            ImGuiIO& io = ImGui::GetIO();
+            if (g_MenuOpen && io.WantCaptureMouse) {
+                // Consume touch input if menu handles it, avoiding underlying game response
+                if (orig_AInputQueue_finishEvent) {
+                    orig_AInputQueue_finishEvent(queue, event, 1);
+                }
+                continue;
             }
-            return hook_AInputQueue_getEvent(queue, outEvent);
         }
+        return ret;
     }
-    return res;
 }
 
-int hook_AInputQueue_preDispatchEvent(AInputQueue* queue, AInputEvent* event) {
-    if (event) {
-        bool consumed = process_touch_event(event);
-        if (consumed) {
-            return 1;
-        }
-    }
-    if (orig_AInputQueue_preDispatchEvent) {
-        return orig_AInputQueue_preDispatchEvent(queue, event);
-    }
-    return 0;
-}
+void TouchHook::Init() {
+    LOGI("Initializing Universal Touch Hook across game engines...");
 
-AInputEvent* hook_AMotionEvent_fromJava(JNIEnv* env, jobject jobj) {
-    AInputEvent* event = orig_AMotionEvent_fromJava ? orig_AMotionEvent_fromJava(env, jobj) : nullptr;
-    if (event) {
-        process_touch_event(event);
-    }
-    return event;
-}
-
-void install_touch_hooks() {
     void* libandroid = dlopen("libandroid.so", RTLD_NOW);
     if (libandroid) {
-        orig_AInputQueue_getEvent = (t_AInputQueue_getEvent)dlsym(libandroid, "AInputQueue_getEvent");
-        orig_AInputQueue_preDispatchEvent = (t_AInputQueue_preDispatchEvent)dlsym(libandroid, "AInputQueue_preDispatchEvent");
-        orig_AInputQueue_finishEvent = (t_AInputQueue_finishEvent)dlsym(libandroid, "AInputQueue_finishEvent");
-        orig_AMotionEvent_fromJava = (t_AMotionEvent_fromJava)dlsym(libandroid, "AMotionEvent_fromJava");
+        orig_AInputQueue_getEvent = (pfn_AInputQueue_getEvent)dlsym(libandroid, "AInputQueue_getEvent");
+        orig_AInputQueue_finishEvent = (pfn_AInputQueue_finishEvent)dlsym(libandroid, "AInputQueue_finishEvent");
     }
 
-    hook_plt_all("AInputQueue_getEvent", (void*)hook_AInputQueue_getEvent, (void**)&orig_AInputQueue_getEvent);
-    hook_plt_all("AInputQueue_preDispatchEvent", (void*)hook_AInputQueue_preDispatchEvent, (void**)&orig_AInputQueue_preDispatchEvent);
-    hook_plt_all("AInputQueue_finishEvent", (void*)hook_AInputQueue_finishEvent, (void**)&orig_AInputQueue_finishEvent);
-    hook_plt_all("AMotionEvent_fromJava", (void*)hook_AMotionEvent_fromJava, (void**)&orig_AMotionEvent_fromJava);
+    if (!orig_AInputQueue_getEvent) {
+        orig_AInputQueue_getEvent = (pfn_AInputQueue_getEvent)dlsym(RTLD_DEFAULT, "AInputQueue_getEvent");
+    }
+    if (!orig_AInputQueue_finishEvent) {
+        orig_AInputQueue_finishEvent = (pfn_AInputQueue_finishEvent)dlsym(RTLD_DEFAULT, "AInputQueue_finishEvent");
+    }
+
+    LOGI("Touch hook setup complete. Function pointers: getEvent=%p, finishEvent=%p",
+         orig_AInputQueue_getEvent, orig_AInputQueue_finishEvent);
 }

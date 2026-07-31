@@ -1,56 +1,58 @@
-#include <unistd.h>
-#include <thread>
-#include <string>
-#include <dlfcn.h>
-#include <android/log.h>
 #include "zygisk.hpp"
-#include "hook.h"
 #include "touch.h"
-#include "menu.h"
+#include "draw.h"
+#include <android/log.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <cstring>
 
-#define LOG_TAG "ZygiskImGuiMain"
+#define LOG_TAG "ZygiskModule"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-static void install_all_hooks() {
-    sleep(1);
-
-    void* libegl = dlopen("libEGL.so", RTLD_NOW);
-    void* orig_swap = nullptr;
-    if (libegl) {
-        orig_swap = dlsym(libegl, "eglSwapBuffers");
-    }
-
-    hook_plt_all("eglSwapBuffers", (void*)hook_eglSwapBuffers, &orig_swap);
-    install_touch_hooks();
-
-    LOGI("Universal ImGui and Touch Hooks installed successfully.");
-}
-
-class UniversalImGuiModule : public zygisk::ModuleBase {
+class UniversalMenuModule : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
     }
 
-    void postAppSpecialize(const zygisk::AppSpecimen *specimen) override {
-        if (!specimen || !specimen->process_name) return;
+    void preAppSpecialize(zygisk::AppSpecializeArgs *args) override {
+        if (!args || !args->nice_name) return;
 
-        std::string process_name = specimen->process_name;
-
-        if (process_name.find("com.android.") == 0 ||
-            process_name.find("system_server") != std::string::npos ||
-            process_name.find("android.process.") == 0) {
-            return;
+        const char *process_name = env->GetStringUTFChars(*args->nice_name, nullptr);
+        if (process_name) {
+            LOGI("preAppSpecialize target: %s", process_name);
+            // Ignore system processes, target application processes
+            if (strstr(process_name, "com.") != nullptr && strstr(process_name, "android.") == nullptr) {
+                is_target_app = true;
+            }
+            env->ReleaseStringUTFChars(*args->nice_name, process_name);
         }
+    }
 
-        LOGI("Target application specialized: %s", process_name.c_str());
-        std::thread(install_all_hooks).detach();
+    void postAppSpecialize(const zygisk::AppSpecializeArgs *args) override {
+        if (!is_target_app) return;
+
+        LOGI("postAppSpecialize: Initializing graphics and touch hooks");
+        pthread_t thread;
+        pthread_create(&thread, nullptr, [](void *) -> void * {
+            sleep(1); // Allow target process graphics context to initialize
+            TouchHook::Init();
+            GraphicsHook::Init();
+            return nullptr;
+        }, nullptr);
+        pthread_detach(thread);
     }
 
 private:
     zygisk::Api *api = nullptr;
     JNIEnv *env = nullptr;
+    bool is_target_app = false;
 };
 
-REGISTER_ZYGISK_MODULE(UniversalImGuiModule)
+static void companion_handler(int socket) {
+    // Companion process socket handler for Magisk v24-26
+}
+
+REGISTER_ZYGISK_MODULE(UniversalMenuModule)
+REGISTER_ZYGISK_COMPANION(companion_handler)

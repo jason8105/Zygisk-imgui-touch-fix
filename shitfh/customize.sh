@@ -1,12 +1,16 @@
-SKIPUNZIP=1
+#!/sbin/sh
+SKIPUNZIP=0
 
-ui_print "- Installing Zygisk Universal ImGui Touch Fix"
+ui_print "--------------------------------------"
+ui_print " Installing Universal Zygisk ImGui    "
+ui_print " Target Magisk: v24.0 - v26.x         "
+ui_print "--------------------------------------"
 
-# Extract zip contents to module path
-unzip -o "$ZIPFILE" 'zygisk/*' -d "$MODPATH"
-unzip -o "$ZIPFILE" 'module.prop' -d "$MODPATH"
+# Verify Zygisk is enabled
+if [ "$MAGISK_VER_CODE" -lt 24000 ]; then
+  ui_print "! Magisk version $MAGISK_VER ($MAGISK_VER_CODE) is not supported."
+  ui_print "! Please upgrade to Magisk v24.0 or higher."
+  abort
+fi
 
-# Set permissions
-set_perm_recursive "$MODPATH" 0 0 0755 0644
-
-ui_print "- Module installation completed successfully."
+ui_print "- Zygisk module files extracted successfully."

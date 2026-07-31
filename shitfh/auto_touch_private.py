@@ -51,7 +51,7 @@ sys.stderr = sys.stdout
 print(f"[*] Logging initialized. Saving session history to: {LOG_FILE}")
 
 # ==========================================
-# SINGLE PAID API KEY & MODEL CONFIGURATION
+# SINGLE PAID API KEY & TOP 5 MODELS POOL
 # ==========================================
 chosen_arg = sys.argv[1].strip() if len(sys.argv) > 1 else ""
 env_key = os.environ.get("GEMINI_API_KEY", os.environ.get("GEMINI_KEY_1", ""))
@@ -66,8 +66,21 @@ else:
     API_KEY = ""
     print("[!] Critical Error: GEMINI_API_KEY not found!")
 
-# Using Gemini 3.6 Flash (Best 2M TPM Tier-1 model for heavy automation)
-SELECTED_MODEL = "models/gemini-3.6-flash"
+# Top 5 Best Models Pool (Automatic Fallback if one times out or fails)
+MODELS_POOL = [
+    "models/gemini-3.6-flash",
+    "models/gemini-3.5-flash",
+    "models/gemini-3.1-pro-preview",
+    "models/gemini-3-flash-preview",
+    "models/gemini-3-pro-preview",
+    "models/gemini-2.5-flash",
+    "models/gemini-2.5-pro",
+    "models/gemini-2.0-flash",
+    "models/gemini-flash-latest",
+    "models/gemini-pro-latest",
+    "models/gemini-2.5-flash-lite",
+    "models/gemini-3.1-flash-lite"
+]
 
 # ==========================================
 # MANUAL REPOSITORY SELECTION
@@ -118,7 +131,6 @@ def get_latest_workflow_run():
     return None, None
 
 def check_artifact_size(run_id):
-    """Checks the generated workflow artifacts to ensure the zip is not empty/broken (~746 bytes)."""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}/artifacts"
     try:
         res = requests.get(url, headers=HEADERS, timeout=15)
@@ -161,7 +173,7 @@ def get_workflow_logs(run_id, max_retries=5):
                     print(f"[*] Downloading text log for failed job: {job['name']}...")
                     log_url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/jobs/{job_id}/logs"
 
-                    log_res = requests.get(log_url, headers=HEADERS, allow_redirects=True, timeout=60)
+                    log_res = requests.get(log_url, headers=HEADERS, allow_redirects=True, timeout=150)
                     if log_res.status_code == 200:
                         all_logs += f"\n=== Job: {job['name']} ===\n" + log_res.text
                         print(f"[*] Log downloaded successfully for {job['name']}")
@@ -169,6 +181,11 @@ def get_workflow_logs(run_id, max_retries=5):
                         print(f"[!] Failed to get log text. Status {log_res.status_code}")
 
             if all_logs:
+                try:
+                    with open("last_failed_log.txt", "w", encoding="utf-8") as lf:
+                        lf.write(all_logs)
+                except Exception:
+                    pass
                 return all_logs
             else:
                 return "Empty logs or no failure found."
@@ -204,7 +221,7 @@ To delete an obsolete file:
 === END DELETE ===
 
 ERROR LOGS / STATUS CONTEXT:
-{error_logs[-2000:]}
+{error_logs[-1000:]}
 """
     payload = {
         "contents": [{
@@ -216,22 +233,24 @@ ERROR LOGS / STATUS CONTEXT:
         print("[!] Error: Paid API_KEY is missing.")
         return "API Error: API_KEY missing."
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/{SELECTED_MODEL}:generateContent?key={API_KEY}"
-    print(f"\n[*] Sending request using model: {SELECTED_MODEL}")
+    # Loop through the Top 5 Models Pool
+    for model_name in MODELS_POOL:
+        url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={API_KEY}"
+        print(f"\n[*] Trying Model: {model_name}...")
 
-    try:
-        response = requests.post(url, json=payload)
-        res_json = response.json()
-        if "candidates" in res_json:
-            print(f"[+] Success getting response from Gemini!")
-            return res_json["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            error_msg = res_json.get('error', {}).get('message', 'Unknown Error')
-            print(f"[!] Gemini API Error: {error_msg}")
-            return f"API Error: {error_msg}"
-    except Exception as e:
-        print(f"[!] Network error connecting to Gemini API: {str(e)}")
-        return f"API Error: {str(e)}"
+        try:
+            response = requests.post(url, json=payload, timeout=150)
+            res_json = response.json()
+            if "candidates" in res_json:
+                print(f"[+] Success getting response from Model: {model_name}")
+                return res_json["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                error_msg = res_json.get('error', {}).get('message', 'Unknown Error')
+                print(f"[!] Model {model_name} failed: {error_msg}. Trying next model...")
+        except Exception as e:
+            print(f"[!] Network error/timeout for {model_name}: {str(e)}. Trying next model...")
+
+    return "API Error: All top 5 models failed or timed out completely."
 
 def apply_ai_patches(ai_response):
     changes_made = []
