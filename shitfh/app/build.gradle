@@ -1,23 +1,21 @@
 plugins {
-    id 'com.android.application'
+    id 'com.android.library'
 }
 
 android {
-    namespace 'com.zygisk.imgui'
-    compileSdk 34
+    namespace 'com.universal.zygisk.imgui'
+    compileSdk 33
 
     defaultConfig {
-        applicationId "com.zygisk.imgui"
         minSdk 24
-        targetSdk 34
-        versionCode 100
-        versionName "1.0.0"
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
 
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden"
-                arguments "-DANDROID_STL=c++_static"
-                abiFilters 'arm64-v8a', 'armeabi-v7a'
+                abiFilters "arm64-v8a"
             }
         }
     }
@@ -28,54 +26,79 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-
+    
     externalNativeBuild {
         cmake {
-            path "src/main/cpp/CMakeLists.txt"
+            path "src/main/jni/CMakeLists.txt"
             version "3.22.1"
         }
     }
-
-    packaging {
-        resources {
-            excludes += ['**/*']
-        }
-    }
 }
 
-tasks.register('zip', Zip) {
-    dependsOn 'externalNativeBuildRelease'
+import java.io.FileOutputStream
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
 
-    archiveFileName = "zygisk-imgui-menu.zip"
-    destinationDirectory = file("${buildDir}/outputs/zip")
-
-    from("${project.rootDir}/module") {
-        include 'module.prop'
-        include 'customize.sh'
-    }
-
-    into('zygisk') {
-        from("${buildDir}/intermediates/cmake/release/obj/arm64-v8a") {
-            include 'libzygisk.so'
-            rename 'libzygisk.so', 'arm64-v8a.so'
+task zipModule(dependsOn: 'assembleRelease') {
+    doLast {
+        def zipFile = file("${buildDir}/outputs/zygisk-imgui-menu.zip")
+        zipFile.parentFile.mkdirs()
+        
+        def zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile))
+        
+        // Add static Magisk files
+        def magiskFilesDir = file("${projectDir}/src/main/magisk")
+        if (magiskFilesDir.exists()) {
+            magiskFilesDir.eachFileRecurse { File file ->
+                if (file.isFile()) {
+                    def relativePath = magiskFilesDir.toURI().relativize(file.toURI()).getPath()
+                    zipOutputStream.putNextEntry(new ZipEntry(relativePath))
+                    file.withInputStream { zipOutputStream << it }
+                    zipOutputStream.closeEntry()
+                }
+            }
+        } else {
+            throw new GradleException("Magisk files directory not found at ${magiskFilesDir.absolutePath}")
         }
-        from("${buildDir}/intermediates/cmake/release/obj/armeabi-v7a") {
-            include 'libzygisk.so'
-            rename 'libzygisk.so', 'armeabi-v7a.so'
+        
+        // Search and add libzygisk.so for all ABIs
+        def intermediatesDir = file("${buildDir}/intermediates")
+        def foundLibs = false
+        if (intermediatesDir.exists()) {
+            intermediatesDir.eachFileRecurse { File file ->
+                if (file.isFile() && file.name == "libzygisk.so") {
+                    if (file.absolutePath.contains("stripped_native_libs") && file.absolutePath.contains("release")) {
+                        def abi = file.parentFile.name
+                        zipOutputStream.putNextEntry(new ZipEntry("zygisk/${abi}/libzygisk.so"))
+                        file.withInputStream { zipOutputStream << it }
+                        zipOutputStream.closeEntry()
+                        foundLibs = true
+                        println "Added to zip: zygisk/${abi}/libzygisk.so from ${file.absolutePath}"
+                    }
+                }
+            }
         }
-        from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/arm64-v8a") {
-            include 'libzygisk.so'
-            rename 'libzygisk.so', 'arm64-v8a.so'
+        
+        // Fallback search if stripped_native_libs is not populated or in a different structure
+        if (!foundLibs && intermediatesDir.exists()) {
+            intermediatesDir.eachFileRecurse { File file ->
+                if (file.isFile() && file.name == "libzygisk.so" && !file.absolutePath.contains("intermediates/transforms") && file.absolutePath.contains("release")) {
+                    def abi = file.parentFile.name
+                    if (["arm64-v8a", "armeabi-v7a"].contains(abi)) {
+                        zipOutputStream.putNextEntry(new ZipEntry("zygisk/${abi}/libzygisk.so"))
+                        file.withInputStream { zipOutputStream << it }
+                        zipOutputStream.closeEntry()
+                        foundLibs = true
+                        println "Fallback added to zip: zygisk/${abi}/libzygisk.so from ${file.absolutePath}"
+                    }
+                }
+            }
         }
-        from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/armeabi-v7a") {
-            include 'libzygisk.so'
-            rename 'libzygisk.so', 'armeabi-v7a.so'
+        
+        zipOutputStream.close()
+        if (!foundLibs) {
+            throw new GradleException("Could not find any compiled libzygisk.so binaries to package!")
         }
-    }
-}
-
-afterEvaluate {
-    tasks.named('assembleRelease').configure {
-        finalizedBy 'zip'
+        println "Successfully created universal flashable Zygisk module zip: ${zipFile.absolutePath}"
     }
 }
