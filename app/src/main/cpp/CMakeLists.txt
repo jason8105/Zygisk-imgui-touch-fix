@@ -1,37 +1,36 @@
-cmake_minimum_required(VERSION 3.22.1)
-project("zygisk")
+cmake_minimum_required(VERSION 3.18.1)
+project("zygisk_imgui_menu")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(zygisk SHARED
-    main.cpp
-    dobby/dobby.cpp
+    zygisk/zygisk_main.cpp
     touch/touch_hook.cpp
-    egl/egl_hook.cpp
+    render/render_hook.cpp
+    hook/plt_hook.cpp
     imgui/imgui.cpp
     imgui/imgui_draw.cpp
     imgui/imgui_widgets.cpp
     imgui/imgui_tables.cpp
     imgui/imgui_demo.cpp
-    imgui/backends/imgui_impl_opengl3.cpp
+    imgui/imgui_impl_android.cpp
+    imgui/imgui_impl_opengl3.cpp
 )
 
 target_include_directories(zygisk PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/zygisk
+    ${CMAKE_CURRENT_SOURCE_DIR}/touch
+    ${CMAKE_CURRENT_SOURCE_DIR}/render
+    ${CMAKE_CURRENT_SOURCE_DIR}/hook
     ${CMAKE_CURRENT_SOURCE_DIR}/imgui
-    ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends
-    ${CMAKE_CURRENT_SOURCE_DIR}/dobby
 )
 
-find_library(log-lib log)
-find_library(egl-lib EGL)
-find_library(gles3-lib GLESv3)
-find_library(android-lib android)
-
 target_link_libraries(zygisk
-    ${log-lib}
-    ${egl-lib}
-    ${gles3-lib}
-    ${android-lib}
+    android
+    EGL
+    GLESv3
+    log
+    dl
 )

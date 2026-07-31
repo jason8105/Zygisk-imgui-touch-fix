@@ -1,5 +1,5 @@
 #pragma once
 
-namespace TouchHook {
+namespace RenderHook {
     void Init();
 }

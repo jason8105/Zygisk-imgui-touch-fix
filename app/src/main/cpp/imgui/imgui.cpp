@@ -1,45 +1,63 @@
 #include "imgui.h"
-#include <stdarg.h>
-#include <stdio.h>
 
-static ImGuiContext* g_Ctx = nullptr;
 static ImGuiIO g_IO;
 static ImDrawData g_DrawData;
 
-ImGuiIO::ImGuiIO() {
-    DisplaySize = ImVec2(0, 0);
-    DeltaTime = 1.0f / 60.0f;
-    Framerate = 60.0f;
-    WantCaptureMouse = false;
-    IniFilename = nullptr;
-}
-
-void ImGuiIO::AddMousePosEvent(float x, float y) {
-    // Registered touch position
-}
-
-void ImGuiIO::AddMouseButtonEvent(int button, bool down) {
-    WantCaptureMouse = down;
-}
-
 namespace ImGui {
-    ImGuiContext* CreateContext() {
-        if (!g_Ctx) g_Ctx = (ImGuiContext*)1;
-        return g_Ctx;
-    }
-    void DestroyContext(ImGuiContext* ctx) { g_Ctx = nullptr; }
-    ImGuiContext* GetCurrentContext() { return g_Ctx; }
-    ImGuiIO& GetIO() { return g_IO; }
-    void StyleColorsDark() {}
-    void NewFrame() {}
-    void Render() {}
-    ImDrawData* GetDrawData() { return &g_DrawData; }
 
-    void SetNextWindowSize(const ImVec2& size, ImGuiCond cond) {}
-    bool Begin(const char* name, bool* p_open) { return true; }
-    void End() {}
-    void Text(const char* fmt, ...) {}
-    void Separator() {}
-    bool Checkbox(const char* label, bool* v) { return false; }
-    bool Button(const char* label, const ImVec2& size) { return false; }
+bool DebugCheckVersionAndDataLayout(const char*, size_t, size_t, size_t, size_t, size_t, size_t) {
+    return true;
+}
+
+void CreateContext() {
+    g_IO = ImGuiIO();
+}
+
+void DestroyContext() {}
+
+ImGuiIO& GetIO() {
+    return g_IO;
+}
+
+void StyleColorsDark() {}
+
+void NewFrame() {
+    g_IO.WantCaptureMouse = false;
+}
+
+void Render() {
+    g_DrawData.Valid = true;
+    g_DrawData.DisplaySize = g_IO.DisplaySize;
+}
+
+ImDrawData* GetDrawData() {
+    return &g_DrawData;
+}
+
+bool Begin(const char*, bool* p_open, ImGuiWindowFlags) {
+    if (p_open && !*p_open) return false;
+    g_IO.WantCaptureMouse = true;
+    return true;
+}
+
+void End() {}
+
+void Text(const char*, ...) {}
+
+void Separator() {}
+
+bool Checkbox(const char*, bool* v) {
+    return v ? *v : false;
+}
+
+bool SliderFloat(const char*, float* v, float, float) {
+    return v ? *v : false;
+}
+
+bool Button(const char*) {
+    return false;
+}
+
+void SetNextWindowSize(const ImVec2&, ImGuiCond) {}
+
 }

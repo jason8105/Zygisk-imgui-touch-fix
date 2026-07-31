@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui'
+    namespace 'com.zygisk.imgui.menu'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.zygisk.imgui"
+        applicationId "com.zygisk.imgui.menu"
         minSdk 24
         targetSdk 34
         versionCode 100
@@ -16,8 +16,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden -fdata-sections -ffunction-sections"
-                arguments "-DANDROID_STL=c++_static"
-                abiFilters 'arm64-v8a', 'armeabi-v7a'
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
             }
         }
     }
@@ -25,6 +24,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
@@ -34,32 +34,49 @@ android {
             version "3.22.1"
         }
     }
-}
 
-tasks.register('packageMagiskModule', Zip) {
-    dependsOn 'externalNativeBuildRelease'
-
-    archiveFileName = "Zygisk-ImGui-UniversalTouch.zip"
-    destinationDirectory = layout.buildDirectory.dir("outputs/zip")
-
-    from(file("${projectDir}/src/main/module"))
-
-    def abiList = ['arm64-v8a', 'armeabi-v7a']
-    abiList.each { abi ->
-        def libTree = fileTree(layout.buildDirectory) {
-            include "**/obj/${abi}/libzygisk.so", "**/stripped_native_libs/**/${abi}/libzygisk.so", "**/merged_native_libs/**/${abi}/libzygisk.so"
-        }
-        into("zygisk/${abi}") {
-            from(libTree)
-            rename { 'libzygisk.so' }
-        }
-        into("zygisk") {
-            from(libTree)
-            rename { "${abi}.so" }
-        }
+    packagingOptions {
+        exclude '**/*.so'
     }
 }
 
-tasks.matching { it.name == 'assembleRelease' || it.name == 'build' }.configureEach {
-    finalizedBy 'packageMagiskModule'
+task makeZip(type: Zip) {
+    dependsOn 'externalNativeBuildRelease'
+
+    archiveFileName = "zygisk-imgui-menu.zip"
+    destinationDirectory = file("${buildDir}/outputs/zip")
+
+    // Include module files (module.prop, customize.sh, etc.)
+    from("${project.rootDir}/module")
+
+    // Dynamically collect compiled libzygisk.so for all ABIs
+    def abiList = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+    abiList.each { abi ->
+        from("${buildDir}/intermediates") {
+            include "**/release/**/${abi}/libzygisk.so"
+            include "**/Release/**/${abi}/libzygisk.so"
+            eachFile { details ->
+                details.path = "zygisk/${abi}/libzygisk.so"
+            }
+            includeEmptyDirs = false
+        }
+        from("${buildDir}/intermediates") {
+            include "**/release/**/${abi}/libzygisk.so"
+            include "**/Release/**/${abi}/libzygisk.so"
+            eachFile { details ->
+                details.path = "zygisk/${abi}.so"
+            }
+            includeEmptyDirs = false
+        }
+    }
+
+    doFirst {
+        println "Packing Zygisk module binaries into output ZIP..."
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name == 'assembleRelease') {
+        task.finalizedBy 'makeZip'
+    }
 }
