@@ -1,0 +1,16 @@
+#!/sbin/sh
+UMASK=0022
+OIFS=$IFS
+IFS='
+'
+[ -z "$ZIPFILE" ] && ZIPFILE="$2"
+[ -z "$OUTFD" ] && OUTFD="$1"
+
+if [ -f /data/adb/magisk/util_functions.sh ]; then
+  . /data/adb/magisk/util_functions.sh
+else
+  echo "! Magisk environment not detected"
+  exit 1
+fi
+
+install_module

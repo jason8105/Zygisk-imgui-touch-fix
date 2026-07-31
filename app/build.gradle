@@ -3,23 +3,22 @@ plugins {
 }
 
 android {
-    namespace 'com.example.zygiskmenu'
     compileSdk 34
+    namespace 'com.zygisk.imgui'
 
     defaultConfig {
-        applicationId "com.example.zygiskmenu"
         minSdk 24
         targetSdk 34
         versionCode 100
         versionName "1.0.0"
 
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden -O3"
+                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden"
                 arguments "-DANDROID_STL=c++_static"
             }
         }
@@ -28,6 +27,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
             minifyEnabled false
@@ -42,38 +42,37 @@ android {
     }
 }
 
-tasks.register('zipModule', Zip) {
+task packageZygiskModule(type: Zip) {
     dependsOn 'externalNativeBuildRelease'
+    archiveFileName = "zygisk-imgui-menu.zip"
+    destinationDirectory = file("$rootDir/out")
 
-    archiveFileName = "zygisk-module.zip"
-    destinationDirectory = file("$buildDir/outputs")
+    // Package module metadata & scripts
+    from("${projectDir}/src/main/module")
 
-    // Zip root metadata files from project directory
-    from(projectDir) {
-        include 'module.prop'
-        include 'customize.sh'
-        include 'service.sh'
-    }
-
-    // Packaging compiled binaries into both zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
-    def abiList = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
-    abiList.each { abi ->
-        def foundLibs = fileTree(dir: "$buildDir/intermediates", include: "**/$abi/libzygisk.so").files
-        if (!foundLibs.isEmpty()) {
-            def libFile = foundLibs.first()
-            from(libFile) {
-                into "zygisk/$abi"
+    // Locate and package libzygisk.so for all target ABIs
+    ['arm64-v8a', 'armeabi-v7a'].each { abi ->
+        into("zygisk/${abi}") {
+            from(fileTree(dir: "$buildDir", include: "**/lib/${abi}/libzygisk.so")) {
+                eachFile { path = "libzygisk.so" }
             }
-            from(libFile) {
-                rename { "${abi}.so" }
-                into "zygisk"
+            from(fileTree(dir: "$buildDir", include: "**/obj/${abi}/libzygisk.so")) {
+                eachFile { path = "libzygisk.so" }
+            }
+        }
+        into("zygisk") {
+            from(fileTree(dir: "$buildDir", include: "**/lib/${abi}/libzygisk.so")) {
+                eachFile { path = "${abi}.so" }
+            }
+            from(fileTree(dir: "$buildDir", include: "**/obj/${abi}/libzygisk.so")) {
+                eachFile { path = "${abi}.so" }
             }
         }
     }
 }
 
 afterEvaluate {
-    tasks.named("assembleRelease").configure {
-        finalizedBy("zipModule")
+    tasks.named('assembleRelease').configure {
+        finalizedBy tasks.named('packageZygiskModule')
     }
 }

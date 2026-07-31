@@ -1,7 +1,7 @@
-id=zygisk_imgui_universal
-name=Zygisk ImGui Universal Touch Menu
+id=zygisk_imgui_menu
+name=Universal Zygisk ImGui Menu
 version=v1.0.0
 versionCode=100
-author=BuildEngineer
-description=Universal Zygisk ImGui Menu with native touch hooking supporting Unity, Unreal Engine, Native C++, Cocos, and Godot.
+author=Engineers
+description=Universal ImGui Menu with universal touch fix supporting Unity, Unreal Engine, and Native C++ games on Magisk v24-v26.
 minMagisk=24000
