@@ -3,23 +3,20 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui.menu'
+    namespace 'com.zygisk.imgui'
     compileSdk 34
 
     defaultConfig {
         minSdk 24
         targetSdk 34
-        versionCode 100
+        versionCode 1000
         versionName "1.0.0"
-
-        ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
-        }
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++20 -fvisibility=hidden -fvisibility-inlines-hidden"
-                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -Wall -fvisibility=hidden -fvisibility-inlines-hidden"
+                arguments "-DANDROID_STL=c++_static"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
         }
     }
@@ -40,33 +37,86 @@ android {
             version "3.22.1"
         }
     }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
 }
 
-afterEvaluate {
-    tasks.register('zipModule', Zip) {
-        dependsOn 'assembleRelease'
+task prepareMagiskModule {
+    dependsOn 'externalNativeBuildRelease'
 
-        archiveFileName.set("zygisk-imgui-menu.zip")
-        destinationDirectory.set(file("${rootDir}/out"))
+    doLast {
+        def stageDir = file("$buildDir/magisk_module")
+        if (stageDir.exists()) stageDir.deleteDir()
+        stageDir.mkdirs()
 
-        from("${rootDir}/module") {
-            include "module.prop"
-            include "customize.sh"
-            include "service.sh"
-            include "system.prop"
+        // Copy static module files
+        copy {
+            from "${projectDir}/src/main/module"
+            into stageDir
         }
 
-        into('zygisk') {
-            from("${buildDir}/intermediates/stripped_native_libs/release/out/lib") {
-                include "**/*.so"
+        // Copy compiled native binaries for each target ABI
+        def abis = ['arm64-v8a', 'armeabi-v7a']
+        abis.each { abi ->
+            def abiTargetDir = file("$stageDir/zygisk/$abi")
+            abiTargetDir.mkdirs()
+
+            def found = false
+            def potentialLocations = [
+                file("$buildDir/intermediates/stripped_native_libs/release/out/lib/$abi/libzygisk.so"),
+                file("$buildDir/intermediates/merged_native_libs/release/out/lib/$abi/libzygisk.so"),
+                file("$buildDir/intermediates/cmake/release/obj/$abi/libzygisk.so"),
+                file("$buildDir/intermediates/cxx/RelWithDebInfo")
+            ]
+
+            for (def loc : potentialLocations) {
+                if (found) break
+                if (loc.isFile() && loc.name == "libzygisk.so") {
+                    copy {
+                        from loc
+                        into abiTargetDir
+                    }
+                    found = true
+                } else if (loc.isDirectory()) {
+                    def files = fileTree(loc).matching { include "**/$abi/libzygisk.so" }
+                    if (!files.isEmpty()) {
+                        copy {
+                            from files.singleFile
+                            into abiTargetDir
+                        }
+                        found = true
+                    }
+                }
             }
-            from("${buildDir}/intermediates/merged_native_libs/release/out/lib") {
-                include "**/*.so"
+
+            if (!found) {
+                logger.warn("Warning: libzygisk.so was not found for $abi!")
+            } else {
+                logger.lifecycle("Successfully staged libzygisk.so for $abi")
             }
         }
     }
+}
 
-    tasks.named('assemble').configure {
-        finalizedBy('zipModule')
+task zipModule(type: Zip) {
+    dependsOn prepareMagiskModule
+    archiveFileName = "zygisk_imgui_menu.zip"
+    destinationDirectory = file("$buildDir/outputs/zip")
+    from "$buildDir/magisk_module"
+
+    doLast {
+        copy {
+            from file("$buildDir/outputs/zip/zygisk_imgui_menu.zip")
+            into file("$buildDir/distributions")
+        }
+        logger.lifecycle("Magisk Module Zip created successfully at $buildDir/outputs/zip/zygisk_imgui_menu.zip")
     }
+}
+
+tasks.matching { it.name == "assembleRelease" || it.name == "assemble" }.configureEach {
+    finalizedBy zipModule
 }

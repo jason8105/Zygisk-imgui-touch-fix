@@ -1,45 +1,13 @@
 #include "zygisk.hpp"
-#include "plt_hook.h"
-#include "touch_hook.h"
-#include "imgui_manager.h"
-#include <EGL/egl.h>
+#include "graphics/graphics_hook.h"
+#include "touch/touch_hook.h"
 #include <android/log.h>
-#include <thread>
-#include <chrono>
+#include <string.h>
 
-#define LOG_TAG "ZygiskMain"
+#define LOG_TAG "ZygiskImGuiModule"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-typedef EGLBoolean (*eglSwapBuffers_t)(EGLDisplay dpy, EGLSurface surface);
-static eglSwapBuffers_t orig_eglSwapBuffers = nullptr;
-
-static EGLBoolean hook_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
-    ImGuiManager::Render(dpy, surface);
-    if (orig_eglSwapBuffers) {
-        return orig_eglSwapBuffers(dpy, surface);
-    }
-    return EGL_FALSE;
-}
-
-static void HookLoop() {
-    bool hooked_egl = false;
-    for (int i = 0; i < 50; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-        if (!hooked_egl) {
-            hooked_egl = PltHook::HookAll("eglSwapBuffers", (void*)hook_eglSwapBuffers, (void**)&orig_eglSwapBuffers);
-            if (hooked_egl) {
-                LOGI("Successfully hooked eglSwapBuffers");
-            }
-        }
-
-        TouchHook::Init();
-
-        if (hooked_egl) break;
-    }
-}
-
-class UniversalModule : public zygisk::ModuleBase {
+class UniversalImGuiModule : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api *api, JNIEnv *env) override {
         this->api = api;
@@ -47,7 +15,18 @@ public:
     }
 
     void postAppSpecialize(const zygisk::AppSpecializeArgs *args) override {
-        std::thread(HookLoop).detach();
+        if (!args || !args->nice_name) return;
+
+        const char *process_name = env->GetStringUTFChars(*args->nice_name, nullptr);
+        if (process_name) {
+            LOGI("Zygisk injected into process: %s", process_name);
+
+            // Install graphics and touch hooks
+            GraphicsHook::InstallHooks();
+            TouchHook::InstallHooks();
+
+            env->ReleaseStringUTFChars(*args->nice_name, process_name);
+        }
     }
 
 private:
@@ -55,4 +34,4 @@ private:
     JNIEnv *env = nullptr;
 };
 
-REGISTER_ZYGISK_MODULE(UniversalModule)
+REGISTER_ZYGISK_MODULE(UniversalImGuiModule)

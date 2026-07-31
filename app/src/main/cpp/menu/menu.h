@@ -1,7 +1,7 @@
-#ifndef MENU_H
-#define MENU_H
+#pragma once
 
-void InitMenuAndHooks();
-void RenderMenu();
-
-#endif // MENU_H
+namespace Menu {
+    void Init();
+    void Render();
+    bool IsOpen();
+}

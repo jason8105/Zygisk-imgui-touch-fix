@@ -1,2 +1,2 @@
 #include "imgui.h"
-// Demo window stubs
+// Demo dummy wrapper

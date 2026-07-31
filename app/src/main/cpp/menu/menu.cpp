@@ -1,97 +1,91 @@
 #include "menu.h"
-#include "../hooks/plt_hook.h"
-#include "../touch/touch_hook.h"
-#include "../imgui/imgui.h"
-#include "../imgui/backends/imgui_impl_opengl3.h"
-#include <EGL/egl.h>
-#include <GLES3/gl3.h>
-#include <android/log.h>
-#include <thread>
-#include <chrono>
+#include "imgui.h"
 
-#define LOG_TAG "ZygiskMenu"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+static bool g_MenuOpen = true;
+static bool g_FeatureGodMode = false;
+static bool g_FeatureUnlimitedAmmo = false;
+static float g_FeatureSpeedMultiplier = 1.0f;
+static float g_FeatureFov = 90.0f;
 
-static bool g_Initialized = false;
-static EGLBoolean (*orig_eglSwapBuffers)(EGLDisplay dpy, EGLSurface surface) = nullptr;
+namespace Menu {
 
-EGLBoolean hook_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
-    if (!g_Initialized) {
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        io.IniFilename = nullptr;
+void Init() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 8.0f;
+    style.FrameRounding = 5.0f;
+    style.PopupRounding = 6.0f;
+    style.GrabRounding = 4.0f;
+    style.WindowBorderSize = 1.0f;
 
-        ImGui::StyleColorsDark();
-        
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.ScaleAllSizes(3.0f);
-        io.FontGlobalScale = 2.2f;
-
-        ImGui_ImplOpenGL3_Init("#version 300 es");
-        g_Initialized = true;
-        LOGI("ImGui context successfully initialized in eglSwapBuffers");
-    }
-
-    EGLint width = 0, height = 0;
-    eglQuerySurface(dpy, surface, EGL_WIDTH, &width);
-    eglQuerySurface(dpy, surface, EGL_HEIGHT, &height);
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2((float)width, (float)height);
-
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui::NewFrame();
-
-    RenderMenu();
-
-    ImGui::Render();
-    
-    GLint last_program, last_viewport[4];
-    glGetIntegerv(GL_CURRENT_PROGRAM, &last_program);
-    glGetIntegerv(GL_VIEWPORT, last_viewport);
-
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    glUseProgram(last_program);
-    glViewport(last_viewport[0], last_viewport[1], last_viewport[2], last_viewport[3]);
-
-    if (orig_eglSwapBuffers) {
-        return orig_eglSwapBuffers(dpy, surface);
-    }
-    return EGL_TRUE;
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.12f, 0.94f);
+    colors[ImGuiCol_Header] = ImVec4(0.20f, 0.25f, 0.35f, 1.00f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.28f, 0.35f, 0.48f, 1.00f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.24f, 0.30f, 0.42f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.20f, 0.25f, 0.35f, 1.00f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.35f, 0.48f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.24f, 0.30f, 0.42f, 1.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.15f, 0.18f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.22f, 0.26f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.18f, 0.18f, 0.22f, 1.00f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.12f, 0.15f, 0.22f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.20f, 0.30f, 1.00f);
 }
 
-void RenderMenu() {
-    if (!IsMenuOpen()) return;
+bool IsOpen() {
+    return g_MenuOpen;
+}
 
-    ImGui::SetNextWindowSize(ImVec2(650, 420), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Universal Zygisk ImGui Menu", nullptr, ImGuiWindowFlags_NoCollapse);
+void Render() {
+    // Floating Toggle Button
+    ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(100.0f, 40.0f), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Toggle", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize);
+    if (ImGui::Button(g_MenuOpen ? "Hide Menu" : "Show Menu", ImVec2(-1, -1))) {
+        g_MenuOpen = !g_MenuOpen;
+    }
+    ImGui::End();
 
-    ImGui::Text("Status: Active & Universal Touch Enabled");
-    ImGui::Separator();
+    if (!g_MenuOpen) return;
 
-    static bool featureEnable = false;
-    static float sliderVal = 1.0f;
+    ImGui::SetNextWindowPos(ImVec2(150.0f, 100.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(450.0f, 320.0f), ImGuiCond_FirstUseEver);
 
-    ImGui::Checkbox("Universal Feature Switch", &featureEnable);
-    ImGui::SliderFloat("Speed Modifier", &sliderVal, 0.1f, 10.0f);
+    if (ImGui::Begin("Zygisk Universal ImGui Menu", &g_MenuOpen)) {
+        if (ImGui::BeginTabBar("MenuTabBar")) {
+            if (ImGui::BeginTabItem("Main")) {
+                ImGui::Spacing();
+                ImGui::Checkbox("God Mode", &g_FeatureGodMode);
+                ImGui::Checkbox("Unlimited Ammo", &g_FeatureUnlimitedAmmo);
+                ImGui::Spacing();
+                ImGui::SliderFloat("Speed Multiplier", &g_FeatureSpeedMultiplier, 1.0f, 10.0f, "%.1fx");
+                ImGui::SliderFloat("FOV Camera", &g_FeatureFov, 60.0f, 120.0f, "%.0f deg");
+                ImGui::EndTabItem();
+            }
 
-    ImGui::Separator();
-    ImGuiIO& io = ImGui::GetIO();
-    ImGui::Text("FPS: %.1f", io.Framerate);
-    ImGui::Text("Touch Position: (%.1f, %.1f)", io.MousePos.x, io.MousePos.y);
-    ImGui::Text("Touch Pressed: %s", io.MouseDown[0] ? "YES" : "NO");
-    ImGui::Text("Touch Consumed By Menu: %s", io.WantCaptureMouse ? "YES" : "NO");
+            if (ImGui::BeginTabItem("Touch Status")) {
+                ImGui::Spacing();
+                ImGuiIO& io = ImGui::GetIO();
+                ImGui::Text("Universal Touch Status: ACTIVE");
+                ImGui::Separator();
+                ImGui::Text("Touch Pos X: %.1f, Y: %.1f", io.MousePos.x, io.MousePos.y);
+                ImGui::Text("WantCaptureMouse: %s", io.WantCaptureMouse ? "TRUE (Consumed)" : "FALSE (Passed)");
+                ImGui::Text("Display Resolution: %.0f x %.0f", io.DisplaySize.x, io.DisplaySize.y);
+                ImGui::EndTabItem();
+            }
 
+            if (ImGui::BeginTabItem("About")) {
+                ImGui::Spacing();
+                ImGui::Text("Universal Zygisk ImGui Menu");
+                ImGui::Text("Supports Unity, Unreal, and Native C++ games.");
+                ImGui::Text("Target Compatibility: Magisk v24.0 - v26.x");
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
+        }
+    }
     ImGui::End();
 }
 
-void InitMenuAndHooks() {
-    PLTHook::RegisterHook("eglSwapBuffers", (void*)hook_eglSwapBuffers, (void**)&orig_eglSwapBuffers);
-    InitTouchHooks();
-
-    for (int i = 0; i < 10; i++) {
-        PLTHook::ApplyHooks();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-}
+} // namespace Menu

@@ -1,16 +1,12 @@
 #!/sbin/sh
-UMASK=0022
+umask 022
 OIFS=$IFS
-IFS='
-'
-[ -z "$ZIPFILE" ] && ZIPFILE="$2"
-[ -z "$OUTFD" ] && OUTFD="$1"
+IFS=$'\n'
 
-if [ -f /data/adb/magisk/util_functions.sh ]; then
-  . /data/adb/magisk/util_functions.sh
-else
-  echo "! Magisk environment not detected"
-  exit 1
-fi
+ZIPFILE="$2"
+O31="$3"
 
-install_module
+unzip -o "$ZIPFILE" 'module.prop' -d "$O31" >/dev/null 2>&1
+unzip -o "$ZIPFILE" 'customize.sh' -d "$O31" >/dev/null 2>&1
+
+. "$O31/customize.sh"

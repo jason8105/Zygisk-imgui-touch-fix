@@ -1,2 +1,3 @@
 #include "imgui.h"
-// Widget implementation stubs
+#include "imgui_internal.h"
+// Widgets dummy wrapper

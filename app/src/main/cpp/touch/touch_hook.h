@@ -1,12 +1,11 @@
-#ifndef TOUCH_HOOK_H
-#define TOUCH_HOOK_H
+#pragma once
 
 #include <android/input.h>
-#include <cstdint>
+#include <jni.h>
 
 namespace TouchHook {
-    void Init();
-    bool ProcessMotionEvent(int action, float x, float y);
+    void InstallHooks();
+    int Hooked_AInputQueue_getEvent(AInputQueue* queue, AInputEvent** outEvent);
+    void Hooked_AInputQueue_finishEvent(AInputQueue* queue, AInputEvent* event, int handled);
+    jboolean Hooked_dispatchTouchEvent(JNIEnv* env, jobject instance, jobject motionEvent);
 }
-
-#endif // TOUCH_HOOK_H

@@ -1,11 +1,9 @@
-#ifndef HOOK_ENGINE_H
-#define HOOK_ENGINE_H
+#pragma once
 
-#include <cstdint>
+#include <stdint.h>
+#include <stddef.h>
 
-class HookEngine {
-public:
-    static void InstallHooks();
-};
-
-#endif // HOOK_ENGINE_H
+namespace HookEngine {
+    void PltHookModule(uintptr_t base, const char* symbol_name, void* new_func, void** old_func);
+    void PltHookAllModules(const char* symbol_name, void* new_func, void** old_func);
+}

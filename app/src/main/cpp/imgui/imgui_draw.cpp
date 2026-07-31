@@ -1,2 +1,3 @@
 #include "imgui.h"
-// Draw command processing stubs
+#include "imgui_internal.h"
+// Draw command implementation dummy wrapper for OpenGL3 backend compatibility

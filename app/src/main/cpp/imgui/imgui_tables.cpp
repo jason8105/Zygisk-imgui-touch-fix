@@ -1,2 +1,3 @@
 #include "imgui.h"
-// Tables implementation stubs
+#include "imgui_internal.h"
+// Tables dummy wrapper
