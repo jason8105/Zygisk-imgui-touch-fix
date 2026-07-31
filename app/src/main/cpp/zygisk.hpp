@@ -1,7 +1,6 @@
 #pragma once
 
 #include <jni.h>
-#include <stdint.h>
 
 namespace zygisk {
 
@@ -10,7 +9,7 @@ struct AppSpecializeArgs {
     jint *gid;
     jintArray *gids;
     jint *runtime_flags;
-    jobjectArray *rlimits;
+    jobjectArray *ptrauth_states;
     jint *mount_external;
     jstring *se_info;
     jstring *nice_name;
@@ -33,16 +32,12 @@ struct ServerSpecializeArgs {
     jlong *effective_capabilities;
 };
 
-enum Option : uint32_t {
-    FORCE_DENYLIST_UNMOUNT = 0,
-    DLCLOSE_MODULE_FOR_UNLOADED_PROCESS = 1,
-};
-
 class Api {
 public:
     virtual bool connectCompanion() = 0;
-    virtual int getCompanionSocket() = 0;
-    virtual void setOption(Option opt) = 0;
+    virtual int getCompanionFd() = 0;
+    virtual void setOption(int option) = 0;
+    virtual void exemptAppSpecialize() = 0;
 };
 
 class ModuleBase {
@@ -57,12 +52,8 @@ public:
 } // namespace zygisk
 
 #define REGISTER_ZYGISK_MODULE(clazz) \
-static clazz _zygisk_module_instance; \
-extern "C" __attribute__((visibility("default"))) \
+extern "C" [[gnu::visibility("default")]] \
 void zygisk_module_entry(zygisk::Api *api, JNIEnv *env) { \
-    _zygisk_module_instance.onLoad(api, env); \
-} \
-extern "C" __attribute__((visibility("default"))) \
-zygisk::ModuleBase* zygisk_companion_entry() { \
-    return nullptr; \
+    static clazz module; \
+    module.onLoad(api, env); \
 }

@@ -1,13 +1,13 @@
-#!/sbin/sh
+#!/system/bin/sh
+SKIPUNZIP=0
 
-if [ "$MAGISK_VER_CODE" -lt 24000 ]; then
-  ui_print "! Magisk v24.0+ is required for Zygisk"
-  abort "! Unsupported Magisk version"
+ui_print "***********************************************"
+ui_print "*    Universal Zygisk ImGui Menu Installer    *"
+ui_print "***********************************************"
+
+if [ ! -d "$MODPATH/zygisk" ]; then
+    ui_print "! Error: Zygisk native libraries missing from module zip!"
+    exit 1
 fi
 
-ui_print "- Installing Universal Zygisk ImGui Menu..."
-ui_print "- Target Architecture: $ARCH"
-
-mkdir -p "$MODPATH/zygisk"
-
-ui_print "- Universal Zygisk ImGui Menu installed successfully!"
+ui_print "- Zygisk ImGui Menu installed successfully."

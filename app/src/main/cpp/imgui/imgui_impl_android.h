@@ -1,5 +1,8 @@
 #pragma once
-struct AInputEvent;
+#include "imgui.h"
 
-bool ImGui_ImplAndroid_InitWithEventLoop();
-int32_t ImGui_ImplAndroid_HandleInputEvent(const AInputEvent* input_event);
+struct AInputEvent;
+IMGUI_IMPL_API bool     ImGui_ImplAndroid_Init(void* window);
+IMGUI_IMPL_API void     ImGui_ImplAndroid_Shutdown();
+IMGUI_IMPL_API void     ImGui_ImplAndroid_NewFrame();
+IMGUI_IMPL_API int32_t  ImGui_ImplAndroid_HandleInputEvent(const AInputEvent* input_event);
