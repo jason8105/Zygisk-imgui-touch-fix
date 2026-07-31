@@ -1,3 +1,3 @@
 #pragma once
 
-void init_touch_hooks();
+void init_touch_hook();

@@ -3,21 +3,24 @@ plugins {
 }
 
 android {
+    compileSdk 33
     namespace 'com.zygisk.imgui'
-    compileSdk 34
 
     defaultConfig {
         applicationId "com.zygisk.imgui"
         minSdk 24
-        targetSdk 34
+        targetSdk 33
         versionCode 100
         versionName "1.0.0"
 
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden -fvisibility-inlines-hidden -DANDROID"
+                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fdata-sections -ffunction-sections"
                 arguments "-DANDROID_STL=c++_static"
-                abiFilters 'arm64-v8a', 'armeabi-v7a'
             }
         }
     }
@@ -34,43 +37,40 @@ android {
 
     externalNativeBuild {
         cmake {
-            path "CMakeLists.txt"
-            version "3.22.1"
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.18.1"
         }
     }
 
     packagingOptions {
-        exclude '**/*'
+        exclude '**/*.so'
     }
 }
 
-task zipModule(type: Zip) {
+task packageZygiskModule(type: Zip) {
     dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName = "zygisk-imgui-menu.zip"
-    destinationDirectory = file("${project.buildDir}/outputs/zip")
+    archiveFileName = "zygisk_imgui_menu.zip"
+    destinationDirectory = file("${buildDir}/outputs/zip")
 
-    // Copy template files
-    from("src/main/template")
+    from("${rootDir}/module") {
+        include "module.prop"
+        include "customize.sh"
+        include "service.sh"
+    }
 
-    // Ensure native libraries compiled by CMake are packed into zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
     ['arm64-v8a', 'armeabi-v7a'].each { abi ->
-        from("build/target_libs/${abi}") {
+        from("${projectDir}/build/zygisk_libs/${abi}") {
             include "libzygisk.so"
             into "zygisk/${abi}"
         }
-        from("build/target_libs/${abi}") {
-            include "libzygisk.so"
-            rename "libzygisk.so", "${abi}.so"
-            into "zygisk"
-        }
     }
 }
 
-tasks.afterEvaluate {
-    if (tasks.findByName('packageReleaseModule')) {
-        packageReleaseModule.dependsOn zipModule
-    } else {
-        assemble.finalizedBy zipModule
+afterEvaluate {
+    if (tasks.findByName('assembleRelease')) {
+        tasks.named('assembleRelease').configure {
+            finalizedBy packageZygiskModule
+        }
     }
 }
