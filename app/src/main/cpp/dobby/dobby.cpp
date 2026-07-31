@@ -1,116 +1,108 @@
 #include "dobby.h"
-#include <link.h>
-#include <elf.h>
 #include <sys/mman.h>
-#include <string.h>
 #include <unistd.h>
-#include <dlfcn.h>
-#include <android/log.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-#define LOG_TAG "PLTHook"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define PAGE_SIZE 4096
+#define PAGE_MASK ~(PAGE_SIZE - 1)
 
-struct HookContext {
-    const char* lib_name;
-    const char* symbol_name;
-    void* new_func;
-    void** old_func;
-    bool hooked;
-};
-
-static int plt_hook_callback(struct dl_phdr_info *info, size_t size, void *data) {
-    HookContext* ctx = static_cast<HookContext*>(data);
-    if (!info->dlpi_name) return 0;
-
-    if (ctx->lib_name && strlen(ctx->lib_name) > 0) {
-        if (!strstr(info->dlpi_name, ctx->lib_name)) {
-            return 0;
-        }
-    }
-
-    ElfW(Addr) base = info->dlpi_addr;
-    const ElfW(Phdr) *phdr = info->dlpi_phdr;
-    const ElfW(Dyn) *dyn = nullptr;
-
-    for (int i = 0; i < info->dlpi_phnum; ++i) {
-        if (phdr[i].p_type == PT_DYNAMIC) {
-            dyn = reinterpret_cast<const ElfW(Dyn)*>(base + phdr[i].p_vaddr);
-            break;
-        }
-    }
-
-    if (!dyn) return 0;
-
-    const ElfW(Sym) *symtab = nullptr;
-    const char *strtab = nullptr;
-    const ElfW(Rel) *rel = nullptr;
-    const ElfW(Rela) *rela = nullptr;
-    size_t relsz = 0, relasz = 0;
-
-    for (const ElfW(Dyn) *d = dyn; d->d_tag != DT_NULL; ++d) {
-        switch (d->d_tag) {
-            case DT_SYMTAB: symtab = reinterpret_cast<const ElfW(Sym)*>(base + d->d_un.d_ptr); break;
-            case DT_STRTAB: strtab = reinterpret_cast<const char*>(base + d->d_un.d_ptr); break;
-            case DT_JMPREL:
-                rel = reinterpret_cast<const ElfW(Rel)*>(base + d->d_un.d_ptr);
-                rela = reinterpret_cast<const ElfW(Rela)*>(base + d->d_un.d_ptr);
-                break;
-            case DT_PLTRELSZ:
-                relsz = d->d_un.d_val;
-                relasz = d->d_un.d_val;
-                break;
-        }
-    }
-
-    if (!symtab || !strtab) return 0;
-
-    static long page_size = sysconf(_SC_PAGESIZE);
-    static uintptr_t page_mask = ~(page_size - 1);
-
-    auto check_and_replace = [&](ElfW(Addr) r_offset, ElfW(Word) r_info) {
-        size_t sym_idx = ELFW(R_SYM)(r_info);
-        const char *sym_name = strtab + symtab[sym_idx].st_name;
-
-        if (strcmp(sym_name, ctx->symbol_name) == 0) {
-            void **got_entry = reinterpret_cast<void**>(base + r_offset);
-            if (ctx->old_func && *got_entry != ctx->new_func) {
-                *ctx->old_func = *got_entry;
-            }
-            if (ctx->new_func) {
-                uintptr_t page_start = reinterpret_cast<uintptr_t>(got_entry) & page_mask;
-                mprotect(reinterpret_cast<void*>(page_start), page_size, PROT_READ | PROT_WRITE);
-                *got_entry = ctx->new_func;
-                mprotect(reinterpret_cast<void*>(page_start), page_size, PROT_READ);
-                ctx->hooked = true;
-            }
-        }
-    };
-
-    if (rel) {
-        size_t count = relsz / sizeof(ElfW(Rel));
-        for (size_t i = 0; i < count; ++i) {
-            check_and_replace(rel[i].r_offset, rel[i].r_info);
-        }
-    }
-
-    if (rela) {
-        size_t count = relasz / sizeof(ElfW(Rela));
-        for (size_t i = 0; i < count; ++i) {
-            check_and_replace(rela[i].r_offset, rela[i].r_info);
-        }
-    }
-
-    return 0;
+static void unprotect_page(void *addr, size_t len) {
+    uintptr_t start = (uintptr_t)addr & PAGE_MASK;
+    uintptr_t end = ((uintptr_t)addr + len + PAGE_SIZE - 1) & PAGE_MASK;
+    mprotect((void *)start, end - start, PROT_READ | PROT_WRITE | PROT_EXEC);
 }
 
-extern "C" int hook_symbol(const char* lib_name, const char* symbol_name, void* new_func, void** old_func) {
-    HookContext ctx = { lib_name, symbol_name, new_func, old_func, false };
-    dl_iterate_phdr(plt_hook_callback, &ctx);
-    if (!ctx.hooked && old_func) {
-        void* handle = dlopen(lib_name, RTLD_LAZY);
-        if (handle) {
-            *old_func = dlsym(handle, symbol_name);
-        }
-    }
-    return ctx.hooked ? 0 : -1;
+int DobbyHook(void *function_address, void *replace_call, void **origin_call) {
+    if (!function_address || !replace_call) return -1;
+
+    void *trampoline = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
+                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (trampoline == MAP_FAILED) return -1;
+
+#if defined(__aarch64__)
+    uint8_t *src = (uint8_t *)function_address;
+    uint8_t *tramp = (uint8_t *)trampoline;
+
+    memcpy(tramp, src, 16);
+    uintptr_t return_addr = (uintptr_t)src + 16;
+    uint32_t tramp_jump[2] = { 0x58000050, 0xd61f0200 }; // ldr x16, #8 ; br x16
+    memcpy(tramp + 16, tramp_jump, 8);
+    memcpy(tramp + 24, &return_addr, 8);
+
+    if (origin_call) *origin_call = trampoline;
+
+    unprotect_page(function_address, 16);
+    uint32_t hook_code[2] = { 0x58000050, 0xd61f0200 };
+    uintptr_t target_addr = (uintptr_t)replace_call;
+
+    memcpy(src, hook_code, 8);
+    memcpy(src + 8, &target_addr, 8);
+
+    __builtin___clear_cache((char *)src, (char *)src + 16);
+    __builtin___clear_cache((char *)tramp, (char *)tramp + 32);
+    return 0;
+
+#elif defined(__arm__)
+    uint8_t *src = (uint8_t *)function_address;
+    uint8_t *tramp = (uint8_t *)trampoline;
+
+    memcpy(tramp, src, 8);
+    uintptr_t return_addr = (uintptr_t)src + 8;
+    uint32_t tramp_jump = 0xe51ff004; // ldr pc, [pc, #-4]
+    memcpy(tramp + 8, &tramp_jump, 4);
+    memcpy(tramp + 12, &return_addr, 4);
+
+    if (origin_call) *origin_call = trampoline;
+
+    unprotect_page(function_address, 8);
+    uint32_t hook_code = 0xe51ff004;
+    uintptr_t target_addr = (uintptr_t)replace_call;
+
+    memcpy(src, &hook_code, 4);
+    memcpy(src + 4, &target_addr, 4);
+
+    __builtin___clear_cache((char *)src, (char *)src + 8);
+    __builtin___clear_cache((char *)tramp, (char *)tramp + 16);
+    return 0;
+
+#elif defined(__x86_64__)
+    uint8_t *src = (uint8_t *)function_address;
+    uint8_t *tramp = (uint8_t *)trampoline;
+
+    memcpy(tramp, src, 14);
+    uintptr_t return_addr = (uintptr_t)src + 14;
+    uint8_t tramp_jump[6] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 };
+    memcpy(tramp + 14, tramp_jump, 6);
+    memcpy(tramp + 20, &return_addr, 8);
+
+    if (origin_call) *origin_call = trampoline;
+
+    unprotect_page(function_address, 14);
+    uint8_t hook_code[6] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 };
+    uintptr_t target_addr = (uintptr_t)replace_call;
+
+    memcpy(src, hook_code, 6);
+    memcpy(src + 6, &target_addr, 8);
+    return 0;
+
+#else
+    uint8_t *src = (uint8_t *)function_address;
+    uint8_t *tramp = (uint8_t *)trampoline;
+
+    memcpy(tramp, src, 5);
+    uintptr_t return_addr = (uintptr_t)src + 5;
+    tramp[5] = 0xE9;
+    int32_t rel_tramp = (int32_t)(return_addr - ((uintptr_t)tramp + 10));
+    memcpy(tramp + 6, &rel_tramp, 4);
+
+    if (origin_call) *origin_call = trampoline;
+
+    unprotect_page(function_address, 5);
+    src[0] = 0xE9;
+    int32_t rel_hook = (int32_t)((uintptr_t)replace_call - ((uintptr_t)src + 5));
+    memcpy(src + 1, &rel_hook, 4);
+    return 0;
+#endif
 }

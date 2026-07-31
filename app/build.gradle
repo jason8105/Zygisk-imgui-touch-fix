@@ -3,11 +3,10 @@ plugins {
 }
 
 android {
-    namespace 'com.universal.zygisk.imgui'
     compileSdk 33
+    namespace 'com.zygisk.imgui'
 
     defaultConfig {
-        applicationId "com.universal.zygisk.imgui"
         minSdk 24
         targetSdk 33
         versionCode 100
@@ -15,9 +14,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -fvisibility=hidden -fdata-sections -ffunction-sections"
+                cppFlags "-std=c++17 -fvisibility=hidden -fexceptions -frtti"
                 arguments "-DANDROID_STL=c++_static"
-                abiFilters "arm64-v8a", "armeabi-v7a"
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
             }
         }
     }
@@ -25,7 +24,6 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
             minifyEnabled false
@@ -38,39 +36,47 @@ android {
             version "3.22.1"
         }
     }
+}
 
-    packagingOptions {
-        exclude '**/*.so'
+task zipModule(type: Zip) {
+    dependsOn 'assembleRelease'
+
+    archiveFileName.set("zygisk-module-release.zip")
+    destinationDirectory.set(file("${project.rootDir}/out"))
+
+    // Copy module property and installer scripts
+    from("${project.rootDir}/module") {
+        include 'module.prop'
+        include 'customize.sh'
+    }
+
+    // Map compiled native libraries to zygisk/<abi>/libzygisk.so and zygisk/<abi>.so
+    def abis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+    abis.each { abi ->
+        from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/${abi}") {
+            include 'libzygisk.so'
+            into "zygisk/${abi}"
+        }
+        from("${buildDir}/intermediates/stripped_native_libs/release/out/lib/${abi}") {
+            include 'libzygisk.so'
+            rename 'libzygisk.so', "${abi}.so"
+            into 'zygisk'
+        }
+        from(fileTree(dir: "${buildDir}/intermediates/cxx", include: "**/${abi}/libzygisk.so")) {
+            into "zygisk/${abi}"
+        }
+    }
+
+    doLast {
+        def zipFile = file("${project.rootDir}/out/zygisk-module-release.zip")
+        if (zipFile.exists() && zipFile.length() > 20000) {
+            println "BUILD SUCCESS: Flashable Zygisk module created at ${zipFile.absolutePath} (${zipFile.length()} bytes)"
+        } else {
+            throw new GradleException("BUILD ERROR: Zip packaging failed or output file is too small (${zipFile?.length()} bytes)")
+        }
     }
 }
 
-// Custom task to pack the compiled native shared libraries and module scripts into a flashable Magisk zip module
-tasks.register('zipModule', Zip) {
-    dependsOn 'externalNativeBuildRelease'
-
-    archiveFileName = "zygisk-imgui-menu.zip"
-    destinationDirectory = file("${buildDir}/outputs")
-
-    // Root module config and scripts
-    from("src/main/module") {
-        include "module.prop"
-        include "customize.sh"
-        include "service.sh"
-    }
-
-    // Packaging compiled native shared libraries into zygisk/<abi>/libzygisk.so
-    into("zygisk/arm64-v8a") {
-        from fileTree(dir: "${buildDir}", include: "**/arm64-v8a/libzygisk.so")
-        eachFile { it.path = it.name }
-    }
-    into("zygisk/armeabi-v7a") {
-        from fileTree(dir: "${buildDir}", include: "**/armeabi-v7a/libzygisk.so")
-        eachFile { it.path = it.name }
-    }
-}
-
-afterEvaluate {
-    tasks.named('assembleRelease').configure {
-        finalizedBy 'zipModule'
-    }
+tasks.matching { it.name == 'assemble' || it.name == 'assembleRelease' }.configureEach { task ->
+    task.finalizedBy 'zipModule'
 }

@@ -1,7 +1,7 @@
 id=zygisk_imgui_menu
-name=Universal ImGui Menu (Zygisk)
+name=Zygisk Universal ImGui Menu
 version=v1.0.0
 versionCode=100
-author=Elite Engineer
-description=Universal Touch-Fixed ImGui overlay menu Zygisk module supporting Unity, Unreal, and Native C++ game engines.
+author=Engineer
+description=Universal touch-fixed ImGui menu for Unity, Unreal Engine, and Native Android games
 minMagisk=24000
