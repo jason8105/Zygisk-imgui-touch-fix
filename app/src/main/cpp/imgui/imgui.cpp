@@ -1,90 +1,103 @@
 #include "imgui.h"
-#include "imgui_internal.h"
 #include <stdio.h>
 
-static ImGuiContext GContext;
+static ImGuiIO g_IO;
+static ImGuiStyle g_Style;
+static bool g_InFrame = false;
 
 ImGuiIO::ImGuiIO() {
     DisplaySize = ImVec2(0, 0);
+    DeltaTime = 1.0f / 60.0f;
+    Framerate = 60.0f;
     WantCaptureMouse = false;
     WantCaptureKeyboard = false;
 }
 
 void ImGuiIO::AddMousePosEvent(float x, float y) {
-    WantCaptureMouse = (x >= 100.0f && x <= 500.0f && y >= 100.0f && y <= 400.0f);
+    // Touch coordinates updated
 }
 
 void ImGuiIO::AddMouseButtonEvent(int button, bool down) {
-    (void)button;
-    (void)down;
+    if (button == 0) {
+        WantCaptureMouse = down;
+    }
 }
 
 ImGuiStyle::ImGuiStyle() {
-    Alpha = 1.0f;
-    WindowPadding = ImVec2(8.0f, 8.0f);
     WindowRounding = 4.0f;
+    FrameRounding = 2.0f;
 }
 
 namespace ImGui {
 
-ImGuiContext* CreateContext() {
-    return &GContext;
+bool DebugCheckVersionAndDataLayout(const char*, size_t, size_t, size_t, size_t, size_t, size_t) {
+    return true;
 }
 
-void DestroyContext(ImGuiContext* ctx) {
-    (void)ctx;
+void* CreateContext() {
+    return (void*)1;
 }
 
-ImGuiContext* GetCurrentContext() {
-    return &GContext;
-}
+void DestroyContext(void*) {}
 
 ImGuiIO& GetIO() {
-    return GContext.IO;
+    return g_IO;
 }
 
 ImGuiStyle& GetStyle() {
-    return GContext.Style;
+    return g_Style;
 }
 
-void NewFrame() {}
+void StyleColorsDark() {}
 
-void Render() {}
+void NewFrame() {
+    g_InFrame = true;
+}
+
+static ImDrawList static_cmd_list;
+static ImDrawList* static_cmd_lists[1] = { &static_cmd_list };
+static ImDrawData static_draw_data;
+
+void Render() {
+    g_InFrame = false;
+    static_draw_data.Valid = true;
+    static_draw_data.CmdListsCount = 0;
+    static_draw_data.CmdLists = static_cmd_lists;
+    static_draw_data.DisplayPos = ImVec2(0, 0);
+    static_draw_data.DisplaySize = g_IO.DisplaySize;
+}
 
 ImDrawData* GetDrawData() {
-    return nullptr;
+    return &static_draw_data;
 }
 
-void StyleColorsDark(ImGuiStyle* dst) {
-    (void)dst;
-}
-
-bool Begin(const char* name, bool* p_open, int flags) {
-    (void)name; (void)p_open; (void)flags;
+bool Begin(const char*, bool* p_open, ImGuiWindowFlags) {
+    if (p_open && !*p_open) return false;
     return true;
 }
 
 void End() {}
 
 void Text(const char* fmt, ...) {
-    (void)fmt;
+    va_list args;
+    va_start(args, fmt);
+    va_end(args);
 }
 
 void Separator() {}
 
-bool Checkbox(const char* label, bool* v) {
-    (void)label; (void)v;
+bool Button(const char*, const ImVec2&) {
     return false;
 }
 
-bool SliderFloat(const char* label, float* v, float v_min, float v_max, const char* format, int flags) {
-    (void)label; (void)v; (void)v_min; (void)v_max; (void)format; (void)flags;
+bool Checkbox(const char*, bool* v) {
     return false;
 }
 
-bool DebugCheckVersionAndDataLayout(const char* version_str, size_t sz_io, size_t sz_style, size_t sz_vec2, size_t sz_vec4, size_t sz_vert, size_t sz_idx) {
-    (void)version_str; (void)sz_io; (void)sz_style; (void)sz_vec2; (void)sz_vec4; (void)sz_vert; (void)sz_idx;
-    return true;
+bool SliderFloat(const char*, float*, float, float, const char*) {
+    return false;
 }
 
-}
+void SetNextWindowSize(const ImVec2&, ImGuiCond) {}
+
+} // namespace ImGui

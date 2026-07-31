@@ -1,7 +1,7 @@
-id=zygisk_imgui_menu
-name=Universal Zygisk ImGui Menu
+id=zygisk_universal_imgui
+name=Universal ImGui Menu Zygisk
 version=v1.0.0
 versionCode=100
-author=Engineers
-description=Universal ImGui Menu with universal touch fix supporting Unity, Unreal Engine, and Native C++ games on Magisk v24-v26.
+author=Universal Engine Engineer
+description=Universal ImGui overlay menu with touch fix supporting Unity, Unreal Engine, and Native C++ games.
 minMagisk=24000

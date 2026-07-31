@@ -3,23 +3,21 @@ plugins {
 }
 
 android {
-    namespace 'com.zygisk.imgui'
-    compileSdk 34
+    namespace 'com.universal.zygisk.imgui'
+    compileSdk 33
 
     defaultConfig {
+        applicationId "com.universal.zygisk.imgui"
         minSdk 24
-        targetSdk 34
+        targetSdk 33
         versionCode 100
         versionName "1.0.0"
 
-        ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
-        }
-
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -O3 -fvisibility=hidden -fvisibility-inlines-hidden"
+                cppFlags "-std=c++17 -fvisibility=hidden -fdata-sections -ffunction-sections"
                 arguments "-DANDROID_STL=c++_static"
+                abiFilters "arm64-v8a", "armeabi-v7a"
             }
         }
     }
@@ -30,7 +28,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            debuggable true
+            minifyEnabled false
         }
     }
 
@@ -46,38 +44,33 @@ android {
     }
 }
 
-task packageMagiskModule(type: Zip) {
+// Custom task to pack the compiled native shared libraries and module scripts into a flashable Magisk zip module
+tasks.register('zipModule', Zip) {
     dependsOn 'externalNativeBuildRelease'
 
-    archiveFileName = "zygisk-imgui-release.zip"
-    destinationDirectory = file("${project.rootDir}/out")
+    archiveFileName = "zygisk-imgui-menu.zip"
+    destinationDirectory = file("${buildDir}/outputs")
 
-    // Copy module prop and shell scripts
-    from("${projectDir}/src/main/assets") {
+    // Root module config and scripts
+    from("src/main/module") {
         include "module.prop"
+        include "customize.sh"
         include "service.sh"
-        include "post-fs-data.sh"
-        include "system/**"
     }
 
-    // Process and copy native binaries for all supported ABIs
-    def abis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
-    abis.each { abi ->
-        def candidateFiles = fileTree(dir: "${buildDir}/intermediates", include: "**/lib/${abi}/libzygisk.so")
-                .plus(fileTree(dir: "${buildDir}/intermediates", include: "**/${abi}/libzygisk.so"))
-
-        from(candidateFiles) {
-            into "zygisk/${abi}"
-            rename { "libzygisk.so" }
-        }
-        from(candidateFiles) {
-            into "zygisk"
-            rename { "${abi}.so" }
-        }
+    // Packaging compiled native shared libraries into zygisk/<abi>/libzygisk.so
+    into("zygisk/arm64-v8a") {
+        from fileTree(dir: "${buildDir}", include: "**/arm64-v8a/libzygisk.so")
+        eachFile { it.path = it.name }
+    }
+    into("zygisk/armeabi-v7a") {
+        from fileTree(dir: "${buildDir}", include: "**/armeabi-v7a/libzygisk.so")
+        eachFile { it.path = it.name }
     }
 }
 
-tasks.afterEvaluate {
-    packageMagiskModule.mustRunAfter('externalNativeBuildRelease')
-    assembleRelease.finalizedBy(packageMagiskModule)
+afterEvaluate {
+    tasks.named('assembleRelease').configure {
+        finalizedBy 'zipModule'
+    }
 }
