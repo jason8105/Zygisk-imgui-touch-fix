@@ -1,0 +1,19 @@
+#!/sbin/sh
+umask 022
+if [ -z "$3" ]; then
+  echo "[-] Invalid update arguments"
+  exit 1
+fi
+O3="$3"
+if [ ! -f "$O3" ]; then
+  O3="$ZIPFILE"
+fi
+
+if [ -f /data/adb/magisk/util_functions.sh ]; then
+  . /data/adb/magisk/util_functions.sh
+else
+  echo "! Magisk environment not detected"
+  exit 1
+fi
+
+install_module

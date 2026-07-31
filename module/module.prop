@@ -1,7 +1,7 @@
 id=zygisk_imgui_menu
-name=Universal Zygisk ImGui Menu
+name=Universal ImGui Menu
 version=v1.0.0
 versionCode=100
 author=BuildEngineer
-description=Universal ImGui Overlay with Touch Fix supporting Unity, Unreal, and Native C++ game engines via Zygisk.
+description=Universal Zygisk ImGui menu supporting all game engines (Unity, Unreal Engine, Native C++) with fixed universal touch input handling.
 minMagisk=24000

@@ -1,6 +1,7 @@
 #pragma once
+#include "imgui.h"
 
-bool ImGui_ImplOpenGL3_Init(const char* glsl_version = nullptr);
-void ImGui_ImplOpenGL3_Shutdown();
-void ImGui_ImplOpenGL3_NewFrame();
-void ImGui_ImplOpenGL3_RenderDrawData(ImDrawData* draw_data);
+IMGUI_IMPL_API bool ImGui_ImplOpenGL3_Init(const char* glsl_version = nullptr);
+IMGUI_IMPL_API void ImGui_ImplOpenGL3_Shutdown();
+IMGUI_IMPL_API void ImGui_ImplOpenGL3_NewFrame();
+IMGUI_IMPL_API void ImGui_ImplOpenGL3_RenderDrawData(ImDrawData* draw_data);

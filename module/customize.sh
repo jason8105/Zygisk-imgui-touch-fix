@@ -1,17 +1,15 @@
-#!/system/bin/sh
+#!/sbin/sh
 SKIPUNZIP=0
 
-ui_print "****************************************"
-ui_print "* Universal Zygisk ImGui Menu Installer *"
-ui_print "****************************************"
+ui_print "- Installing Universal ImGui Zygisk Module..."
+ui_print "- Target Magisk: v24.0 - v26.x compatible"
 
-if [ "$MAGISK_VER_CODE" -lt 24000 ]; then
-  ui_print "! Magisk v24.0 or higher is required!"
-  abort
+# Check zygisk architecture files
+if [ -d "$ZIPFILE/zygisk" ]; then
+  ui_print "- Found Zygisk native libraries"
+else
+  ui_print "! Zygisk native libraries missing from zip"
+  exit 1
 fi
 
-if [ -f "$ZIPFILE" ]; then
-  ui_print "- Extracting module files..."
-fi
-
-ui_print "- Installation complete."
+ui_print "- Universal ImGui Zygisk Module installed successfully!"
