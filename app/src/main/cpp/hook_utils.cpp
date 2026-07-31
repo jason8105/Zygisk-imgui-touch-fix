@@ -1,83 +1,74 @@
-#include "hook_utils.h"
-#include <sys/mman.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
+#include "hook_utils.hpp"
 #include <android/log.h>
 
-#define LOG_TAG "ZygiskHook"
+#define LOG_TAG "ZygiskImGui"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-#if defined(__aarch64__)
-int DobbyHook(void *function_address, void *replace_call, void **origin_call) {
-    if (!function_address || !replace_call) return -1;
+namespace NativeHook {
 
-    size_t pageSize = sysconf(_SC_PAGESIZE);
-    uintptr_t pageStart = (uintptr_t)function_address & ~(pageSize - 1);
+static uintptr_t GetPageStart(uintptr_t addr) {
+    return addr & PAGE_MASK;
+}
 
-    uint32_t *trampoline = (uint32_t*)mmap(NULL, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    if (trampoline == MAP_FAILED) return -1;
+static bool UnprotectPage(void* addr) {
+    uintptr_t page_start = GetPageStart(reinterpret_cast<uintptr_t>(addr));
+    return mprotect(reinterpret_cast<void*>(page_start), PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC) == 0;
+}
 
-    memcpy(trampoline, function_address, 16);
+struct PhdrCallbackArgs {
+    const char* symbol_name;
+    void* target_func;
+    void* replace_func;
+    int patched_count;
+};
 
-    uintptr_t returnAddr = (uintptr_t)function_address + 16;
-    trampoline[4] = 0x58000050; // LDR X16, #8
-    trampoline[5] = 0xd61f0200; // BR X16
-    memcpy(&trampoline[6], &returnAddr, sizeof(void*));
+static int PhdrCallback(struct dl_phdr_info* info, size_size_t /*unused*/, void* data) {
+    PhdrCallbackArgs* args = reinterpret_cast<PhdrCallbackArgs*>(data);
+    if (!info || !args->target_func) return 0;
 
-    if (origin_call) {
-        *origin_call = (void*)trampoline;
+    for (int i = 0; i < info->dlpi_phnum; ++i) {
+        if (info->dlpi_phdr[i].p_type == PT_DYNAMIC) {
+            ElfW(Dyn)* dyn = reinterpret_cast<ElfW(Dyn)*>(info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
+            ElfW(Addr)* got = nullptr;
+
+            for (ElfW(Dyn)* d = dyn; d->d_tag != DT_NULL; ++d) {
+                if (d->d_tag == DT_PLTGOT) {
+                    got = reinterpret_cast<ElfW(Addr)*>(d->d_un.d_ptr);
+                    break;
+                }
+            }
+
+            if (got) {
+                for (int j = 0; j < 1024; ++j) {
+                    void** got_entry = reinterpret_cast<void**>(&got[j]);
+                    if (*got_entry == args->target_func) {
+                        if (UnprotectPage(got_entry)) {
+                            *got_entry = args->replace_func;
+                            args->patched_count++;
+                        }
+                    }
+                }
+            }
+        }
     }
-
-    mprotect((void*)pageStart, pageSize * 2, PROT_READ | PROT_WRITE | PROT_EXEC);
-
-    uint32_t *target = (uint32_t*)function_address;
-    uintptr_t hookAddr = (uintptr_t)replace_call;
-    target[0] = 0x58000050; // LDR X16, #8
-    target[1] = 0xd61f0200; // BR X16
-    memcpy(&target[2], &hookAddr, sizeof(void*));
-
-    __builtin___clear_cache((char*)function_address, (char*)function_address + 16);
-    __builtin___clear_cache((char*)trampoline, (char*)trampoline + 32);
-
-    mprotect((void*)pageStart, pageSize * 2, PROT_READ | PROT_EXEC);
-
     return 0;
 }
-#elif defined(__arm__)
-int DobbyHook(void *function_address, void *replace_call, void **origin_call) {
-    if (!function_address || !replace_call) return -1;
 
-    size_t pageSize = sysconf(_SC_PAGESIZE);
-    uintptr_t pageStart = (uintptr_t)function_address & ~(pageSize - 1);
-
-    uint32_t *trampoline = (uint32_t*)mmap(NULL, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    if (trampoline == MAP_FAILED) return -1;
-
-    memcpy(trampoline, function_address, 8);
-    uintptr_t returnAddr = (uintptr_t)function_address + 8;
-    trampoline[2] = 0xe51ff004; // LDR PC, [PC, #-4]
-    trampoline[3] = (uint32_t)returnAddr;
-
-    if (origin_call) {
-        *origin_call = (void*)trampoline;
+bool HookAll(const char* symbol_name, void* replace_func, void** orig_func) {
+    void* target = dlsym(RTLD_DEFAULT, symbol_name);
+    if (!target) {
+        LOGI("Symbol %s not found", symbol_name);
+        return false;
     }
 
-    mprotect((void*)pageStart, pageSize * 2, PROT_READ | PROT_WRITE | PROT_EXEC);
+    if (orig_func && !*orig_func) {
+        *orig_func = target;
+    }
 
-    uint32_t *target = (uint32_t*)function_address;
-    target[0] = 0xe51ff004; // LDR PC, [PC, #-4]
-    target[1] = (uint32_t)replace_call;
-
-    __builtin___clear_cache((char*)function_address, (char*)function_address + 8);
-    __builtin___clear_cache((char*)trampoline, (char*)trampoline + 16);
-
-    mprotect((void*)pageStart, pageSize * 2, PROT_READ | PROT_EXEC);
-
-    return 0;
+    PhdrCallbackArgs args{symbol_name, target, replace_func, 0};
+    dl_iterate_phdr(PhdrCallback, &args);
+    LOGI("Hooked symbol %s at %d location(s)", symbol_name, args.patched_count);
+    return true;
 }
-#else
-int DobbyHook(void *function_address, void *replace_call, void **origin_call) {
-    return -1;
+
 }
-#endif
