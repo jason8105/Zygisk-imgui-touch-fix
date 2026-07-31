@@ -1,5 +1,3 @@
 #pragma once
 
-namespace EGLHook {
-    void Init();
-}
+void init_egl_hooks();
