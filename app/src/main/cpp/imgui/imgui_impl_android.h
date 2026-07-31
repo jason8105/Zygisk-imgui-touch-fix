@@ -1,7 +1,5 @@
 #pragma once
-#include "imgui.h"
+struct AInputEvent;
 
-struct ANativeWindow;
-
-bool ImGui_ImplAndroid_InitPlatformInterface(ANativeWindow* window);
-void ImGui_ImplAndroid_Shutdown();
+bool ImGui_ImplAndroid_InitWithEventLoop();
+int32_t ImGui_ImplAndroid_HandleInputEvent(const AInputEvent* input_event);
